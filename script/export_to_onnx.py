@@ -7,12 +7,16 @@ from collections import OrderedDict
 
 
 class FCOSBackboneOnly(torch.nn.Module):
-    def __init__(self, original_model):
+    def __init__(self):
         super().__init__()
-        self.backbone = original_model.backbone
-        self.anchor_generator = original_model.anchor_generator
-        self.head = original_model.head
-        self.transform = original_model.transform
+        # Load pretrained FCOS model
+        print("Loading pretrained FCOS model...")
+        self.model = fcos_resnet50_fpn(weights=FCOS_ResNet50_FPN_Weights.DEFAULT)
+        self.model.eval()
+        self.backbone = self.model.backbone
+        self.anchor_generator = self.model.anchor_generator
+        self.head = self.model.head
+        self.transform = self.model.transform
 
     def forward(self, images):
         # Store original image sizes before transformation
@@ -61,18 +65,16 @@ ap.add_argument('--height', type=int, default=374,
                 help='Input image height')
 ap.add_argument('--width', type=int, default=1238,
                 help='Input image width')
-args = vars(ap.parse_args())
+#args = vars(ap.parse_args())
+args = {'output': './fcos_trt_backend/models', 'height': 374, 'width': 1238}
 
 # Create output directory if it doesn't exist
 os.makedirs(args['output'], exist_ok=True)
 
 # Load pretrained FCOS model
-print("Loading pretrained FCOS model...")
-original_model = fcos_resnet50_fpn(weights=FCOS_ResNet50_FPN_Weights.DEFAULT)
-original_model.eval()
-
+print("Creating pretrained FCOS backbone model...")
 # Create backbone-only version
-model = FCOSBackboneOnly(original_model)
+model = FCOSBackboneOnly()
 model.eval()
 
 # Create dummy input - note: input should be a list of tensors for proper transform handling

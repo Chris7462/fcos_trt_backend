@@ -1,77 +1,84 @@
-cmake_minimum_required(VERSION 3.8)
-project(fcos_torch_backend VERSION 1.0.0 LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.16)
+project(FCOSTensorRT)
 
-set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic)
-endif()
-
-# find dependencies
-find_package(ament_cmake REQUIRED)
-find_package(Torch REQUIRED)
-find_package(TorchVision REQUIRED)
+# Find required packages
 find_package(OpenCV REQUIRED)
+find_package(PkgConfig REQUIRED)
 
-add_library(fcos_torch_backend
-  src/fcos_torch_backend.cpp)
+# Find CUDA
+find_package(CUDA REQUIRED)
+enable_language(CUDA)
 
-target_include_directories(fcos_torch_backend
-  PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
-    ${TORCH_INCLUDE_DIRS}
-    ${OpenCV_INCLUDE_DIRS})
+# Set TensorRT paths (adjust these paths according to your installation)
+set(TENSORRT_ROOT "/usr/local/TensorRT" CACHE PATH "TensorRT installation directory")
 
-target_link_libraries(fcos_torch_backend
-  PUBLIC
-    ${TORCH_LIBRARIES}
-    ${OpenCV_LIBS}
-    -Wl,--no-as-needed TorchVision::TorchVision)
-
-target_compile_features(fcos_torch_backend PUBLIC cxx_std_17)
-
-# Optionally install the library
-install(TARGETS fcos_torch_backend
-  EXPORT export_${PROJECT_NAME}
-  LIBRARY DESTINATION lib
-  ARCHIVE DESTINATION lib
-  RUNTIME DESTINATION bin
-  INCLUDES DESTINATION include
+# Find TensorRT libraries
+find_library(TENSORRT_LIBRARY_NVINFER nvinfer
+  HINTS ${TENSORRT_ROOT}/lib ${TENSORRT_ROOT}/lib64
+  PATH_SUFFIXES lib lib64
 )
 
-# Install header files
-install(DIRECTORY include/
-  DESTINATION include
-  FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp")
+find_library(TENSORRT_LIBRARY_NVINFER_PLUGIN nvinfer_plugin
+  HINTS ${TENSORRT_ROOT}/lib ${TENSORRT_ROOT}/lib64
+  PATH_SUFFIXES lib lib64
+)
 
-# Export targets and dependencies
-ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
-ament_export_dependencies(OpenCV Torch)
+find_library(TENSORRT_LIBRARY_NVONNXPARSER nvonnxparser
+  HINTS ${TENSORRT_ROOT}/lib ${TENSORRT_ROOT}/lib64
+  PATH_SUFFIXES lib lib64
+)
 
-# Export include directories for downstream packages
-ament_export_include_directories(include)
-
-if(BUILD_TESTING)
-  find_package(ament_lint_auto REQUIRED)
-  # the following line skips the linter which checks for copyrights
-  # comment the line when a copyright and license is added to all source files
-  set(ament_cmake_copyright_FOUND TRUE)
-  # the following line skips cpplint (only works in a git repo)
-  # comment the line when this package is in a git repo and when
-  # a copyright and license is added to all source files
-  set(ament_cmake_cpplint_FOUND TRUE)
-  ament_lint_auto_find_test_dependencies()
-
-  find_package(ament_cmake_gtest REQUIRED)
-
-  ament_add_gtest(test_fcos_torch_backend
-    test/test_fcos_torch_backend.cpp)
-
-  target_link_libraries(test_fcos_torch_backend
-    fcos_torch_backend
-    gtest_main)
-
+# Check if TensorRT libraries were found
+if(NOT TENSORRT_LIBRARY_NVINFER)
+  message(FATAL_ERROR "Could not find nvinfer library")
 endif()
 
-ament_package()
+if(NOT TENSORRT_LIBRARY_NVINFER_PLUGIN)
+  message(FATAL_ERROR "Could not find nvinfer_plugin library")
+endif()
+
+if(NOT TENSORRT_LIBRARY_NVONNXPARSER)
+  message(FATAL_ERROR "Could not find nvonnxparser library")
+endif()
+
+# Include directories
+include_directories(
+  ${OpenCV_INCLUDE_DIRS}
+  ${CUDA_INCLUDE_DIRS}
+  ${TENSORRT_ROOT}/include
+)
+
+# Create executable
+add_executable(fcos_tensorrt
+  src/fcos_trt_backend.cpp
+)
+
+# Link libraries
+target_link_libraries(fcos_tensorrt
+  ${OpenCV_LIBS}
+  ${CUDA_LIBRARIES}
+  ${TENSORRT_LIBRARY_NVINFER}
+  ${TENSORRT_LIBRARY_NVINFER_PLUGIN}
+  ${TENSORRT_LIBRARY_NVONNXPARSER}
+  cudart
+)
+
+# Set CUDA properties
+set_target_properties(fcos_tensorrt PROPERTIES
+  CUDA_ARCHITECTURES "60;61;70;75;80;86;89;90"
+)
+
+# Compiler flags
+target_compile_options(fcos_tensorrt PRIVATE
+  $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -O3>
+)
+
+# Print information
+message(STATUS "OpenCV version: ${OpenCV_VERSION}")
+message(STATUS "CUDA version: ${CUDA_VERSION}")
+message(STATUS "TensorRT root: ${TENSORRT_ROOT}")
+message(STATUS "TensorRT nvinfer: ${TENSORRT_LIBRARY_NVINFER}")
+message(STATUS "TensorRT nvonnxparser: ${TENSORRT_LIBRARY_NVONNXPARSER}")
