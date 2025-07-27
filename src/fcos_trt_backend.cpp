@@ -163,22 +163,23 @@ void FCOSTrtBackend::warmup()
   CUDA_CHECK(cudaStreamSynchronize(stream_));
 }
 
-std::vector<uint8_t> FCOSTrtBackend::load_engine_file(const std::string & engine_path) const
+std::vector<uint8_t> FCOSTrtBackend::load_engine_file(
+  const std::string & engine_path) const
 {
-  std::ifstream file(engine_path, std::ios::binary);
-  if (!file.good()) {
-    throw TensorRTException("Cannot open engine file: " + engine_path);
+  std::ifstream file(engine_path, std::ios::binary | std::ios::ate);
+  if (!file.is_open()) {
+    throw std::runtime_error("Failed to open engine file: " + engine_path);
   }
 
-  file.seekg(0, std::ios::end);
-  size_t size = file.tellg();
+  std::streamsize size = file.tellg();
   file.seekg(0, std::ios::beg);
 
-  std::vector<uint8_t> data(size);
-  file.read(reinterpret_cast<char*>(data.data()), size);
-  file.close();
+  std::vector<uint8_t> buffer(size);
+  if (!file.read(reinterpret_cast<char *>(buffer.data()), size)) {
+    throw std::runtime_error("Failed to read engine file: " + engine_path);
+  }
 
-  return data;
+  return buffer;
 }
 
 void FCOSTrtBackend::preprocess_image(const cv::Mat & image, float * output, cudaStream_t stream) const
