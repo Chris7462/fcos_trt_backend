@@ -15,10 +15,10 @@ FCOSTrtBackend::FCOSTrtBackend(const std::string & engine_path, const Config & c
     find_tensor_names();
     initialize_memory();
     initialize_streams();
-    warmup();
+    warmup_engine();
   } catch (const std::exception & e) {
     cleanup();
-    throw;
+    throw TensorRTException("Initialization failed: " + std::string(e.what()));
   }
 }
 
@@ -150,7 +150,7 @@ void FCOSTrtBackend::initialize_streams()
   CUDA_CHECK(cudaStreamCreate(&stream_));
 }
 
-void FCOSTrtBackend::warmup()
+void FCOSTrtBackend::warmup_engine()
 {
   // Create dummy input image for warmup
   cv::Mat dummy_image = cv::Mat::zeros(config_.height, config_.width, CV_8UC3);

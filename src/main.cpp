@@ -135,7 +135,7 @@ int main(int argc, char* argv[]) {
 
         std::cout << "✓ Image loaded successfully" << std::endl;
         std::cout << "Original image size: " << image.cols << "x" << image.rows << std::endl;
-        std::cout << "Model input size: " << fcos_backend->getInputWidth() << "x" << fcos_backend->getInputHeight() << std::endl;
+        //std::cout << "Model input size: " << fcos_backend->getInputWidth() << "x" << fcos_backend->getInputHeight() << std::endl;
 
         // Run inference
         std::cout << "\nRunning inference..." << std::endl;

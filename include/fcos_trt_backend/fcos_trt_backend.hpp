@@ -141,17 +141,13 @@ public:
    */
   FCOSOutputs infer(const cv::Mat & image);
 
-  // Getters
-  int getInputHeight() const { return config_.height; }
-  int getInputWidth() const { return config_.width; }
-
 private:
   // Initialization methods
   void initialize_engine(const std::string & engine_path);
   void find_tensor_names();
   void initialize_memory();
   void initialize_streams();
-  void warmup();
+  void warmup_engine();
 
   // Memory management
   void cleanup() noexcept;
