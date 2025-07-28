@@ -241,7 +241,7 @@ def visualize_comparison(image_path, original_results, custom_results, confidenc
         ax2.axis('off')
 
         plt.tight_layout()
-        plt.suptitle(f'FCOS Detection Comparison (confidence > {confidence_threshold})', 
+        plt.suptitle(f'FCOS Detection Comparison (confidence > {confidence_threshold})',
                     fontsize=16, fontweight='bold', y=0.98)
 
         # Save the comparison plot
@@ -265,7 +265,7 @@ def compare_models():
 
 
     # Load real test image
-    test_image_path = "fcos_torch_backend/script/image_000.png"
+    test_image_path = "fcos_trt_backend/script/image_000.png"
 
     try:
         from PIL import Image
@@ -408,7 +408,7 @@ def detailed_intermediate_comparison():
     torch.manual_seed(42)
 
     # Load the same test image
-    test_image_path = "fcos_torch_backend/script/image_000.png"
+    test_image_path = "fcos_trt_backend/script/image_000.png"
 
     try:
         from PIL import Image
@@ -500,7 +500,7 @@ if __name__ == "__main__":
     # Run detailed intermediate comparison
     detailed_intermediate_comparison()
 
-    test_image_path = "fcos_torch_backend/script/image_000.png"
+    test_image_path = "fcos_trt_backend/script/image_000.png"
 
     # Create visual comparison
     visualize_comparison(test_image_path, original_results, custom_results, confidence_threshold=0.6)

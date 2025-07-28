@@ -6,7 +6,7 @@ from torchvision.models.detection import FCOS_ResNet50_FPN_Weights
 from collections import OrderedDict
 
 
-class FCOSBackboneOnly(torch.nn.Module):
+class FCOSBackbone(torch.nn.Module):
     def __init__(self):
         super().__init__()
         # Load pretrained FCOS model
@@ -74,7 +74,7 @@ os.makedirs(args['output'], exist_ok=True)
 # Load pretrained FCOS model
 print("Creating pretrained FCOS backbone model...")
 # Create backbone-only version
-model = FCOSBackboneOnly()
+model = FCOSBackbone()
 model.eval()
 
 # Create dummy input - note: input should be a list of tensors for proper transform handling
