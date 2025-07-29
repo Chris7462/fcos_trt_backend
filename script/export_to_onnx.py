@@ -1,12 +1,14 @@
 import argparse
+import cv2
 import os
 import torch
 from torchvision.models.detection import fcos_resnet50_fpn
 from torchvision.models.detection import FCOS_ResNet50_FPN_Weights
+from torchvision.transforms.functional import to_tensor
 from collections import OrderedDict
 
 
-class FCOSBackboneOnly(torch.nn.Module):
+class FCOSBackbone(torch.nn.Module):
     def __init__(self):
         super().__init__()
         # Load pretrained FCOS model
@@ -44,18 +46,11 @@ class FCOSBackboneOnly(torch.nn.Module):
         # Get predictions from head
         head_outputs = self.head(features_list)
 
-        # Calculate num_anchors_per_level for consistency with original forward
-        num_anchors_per_level = [x.size(2) * x.size(3) for x in features_list]
-
         # Return raw outputs without NMS post-processing
         return {
             'cls_logits': head_outputs['cls_logits'],
             'bbox_regression': head_outputs['bbox_regression'],
-            'bbox_ctrness': head_outputs['bbox_ctrness'],
-            'anchors': anchors,
-            'image_sizes': images.image_sizes,
-            'original_image_sizes': original_image_sizes,
-            'num_anchors_per_level': num_anchors_per_level  # Added for completeness
+            'bbox_ctrness': head_outputs['bbox_ctrness']
         }
 
 ap = argparse.ArgumentParser()
@@ -65,8 +60,8 @@ ap.add_argument('--height', type=int, default=374,
                 help='Input image height')
 ap.add_argument('--width', type=int, default=1238,
                 help='Input image width')
-#args = vars(ap.parse_args())
-args = {'output': './fcos_trt_backend/models', 'height': 374, 'width': 1238}
+args = vars(ap.parse_args())
+#args = {'output': './fcos_trt_backend/models', 'height': 374, 'width': 1238}
 
 # Create output directory if it doesn't exist
 os.makedirs(args['output'], exist_ok=True)
@@ -74,7 +69,7 @@ os.makedirs(args['output'], exist_ok=True)
 # Load pretrained FCOS model
 print("Creating pretrained FCOS backbone model...")
 # Create backbone-only version
-model = FCOSBackboneOnly()
+model = FCOSBackbone()
 model.eval()
 
 # Create dummy input - note: input should be a list of tensors for proper transform handling
@@ -97,11 +92,7 @@ torch.onnx.export(
     output_names=[
         'cls_logits',
         'bbox_regression',
-        'bbox_ctrness',
-        'anchors',
-        'image_sizes',
-        'original_image_sizes',
-        'num_anchors_per_level'
+        'bbox_ctrness'
     ],
     # Note: Dynamic axes might be tricky with list inputs and anchor generation
     # Consider using fixed batch size for more reliable ONNX export
