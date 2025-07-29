@@ -1,8 +1,10 @@
 import argparse
+import cv2
 import os
 import torch
 from torchvision.models.detection import fcos_resnet50_fpn
 from torchvision.models.detection import FCOS_ResNet50_FPN_Weights
+from torchvision.transforms.functional import to_tensor
 from collections import OrderedDict
 
 
@@ -65,8 +67,8 @@ ap.add_argument('--height', type=int, default=374,
                 help='Input image height')
 ap.add_argument('--width', type=int, default=1238,
                 help='Input image width')
-#args = vars(ap.parse_args())
-args = {'output': './fcos_trt_backend/models', 'height': 374, 'width': 1238}
+args = vars(ap.parse_args())
+#args = {'output': './fcos_trt_backend/models', 'height': 374, 'width': 1238}
 
 # Create output directory if it doesn't exist
 os.makedirs(args['output'], exist_ok=True)
@@ -76,6 +78,18 @@ print("Creating pretrained FCOS backbone model...")
 # Create backbone-only version
 model = FCOSBackbone()
 model.eval()
+
+# Load image using OpenCV and convert to RGB
+image_path = 'fcos_torch_backend/script/image_000.png'
+image_bgr = cv2.imread(image_path)
+image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+
+# Convert image to tensor and normalize
+image_tensor = to_tensor(image_rgb).unsqueeze(0)  # Shape: [1, 3, H, W]
+
+# Run the model
+with torch.no_grad():
+    outputs = model(image_tensor)
 
 # Create dummy input - note: input should be a list of tensors for proper transform handling
 height, width = args['height'], args['width']

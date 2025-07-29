@@ -43,7 +43,7 @@ with torch.no_grad():
 boxes = outputs['boxes']
 scores = outputs['scores']
 labels = outputs['labels']
-confidence_threshold = 0.6
+confidence_threshold = 0.5
 
 for box, score, label in zip(boxes, scores, labels):
     if score >= confidence_threshold:

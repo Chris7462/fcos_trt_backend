@@ -170,7 +170,7 @@ void FCOSTrtBackend::initialize_memory()
     return size;
   };
 
-  // Calculate memory sizes
+  // Calculate memory sizes for known tensors
   memory_sizes_.input_size = 1 * 3 * config_.height * config_.width * sizeof(float);
   memory_sizes_.cls_logits_size = get_tensor_size(tensor_names_.cls_logits_name) * sizeof(float);
   memory_sizes_.bbox_regression_size = get_tensor_size(tensor_names_.bbox_regression_name) * sizeof(float);
@@ -187,7 +187,7 @@ void FCOSTrtBackend::initialize_memory()
   // Allocate pinned host memory
   CUDA_CHECK(cudaMallocHost(&buffers_.pinned_input, memory_sizes_.input_size));
 
-  // Allocate device memory
+  // Allocate device memory for known tensors
   CUDA_CHECK(cudaMalloc(&buffers_.device_input, memory_sizes_.input_size));
   CUDA_CHECK(cudaMalloc(&buffers_.device_temp_buffer, memory_sizes_.input_size));
   CUDA_CHECK(cudaMalloc(&buffers_.device_cls_logits, memory_sizes_.cls_logits_size));
@@ -207,32 +207,195 @@ void FCOSTrtBackend::initialize_memory()
   CUDA_CHECK(cudaMallocHost(&buffers_.host_original_image_sizes, memory_sizes_.original_image_sizes_size));
   CUDA_CHECK(cudaMallocHost(&buffers_.host_num_anchors_per_level, memory_sizes_.num_anchors_per_level_size));
 
-  // Set tensor addresses
-  if (!context_->setTensorAddress(tensor_names_.input_name.c_str(), buffers_.device_input)) {
-    throw TensorRTException("Failed to set input tensor address");
+  // Set tensor addresses for ALL tensors (both known and unknown)
+
+  for (int i = 0; i < engine_->getNbIOTensors(); ++i) {
+    const char* tensor_name = engine_->getIOTensorName(i);
+    nvinfer1::TensorIOMode mode = engine_->getTensorIOMode(tensor_name);
+    std::string name_str(tensor_name);
+
+    if (mode == nvinfer1::TensorIOMode::kINPUT) {
+      if (name_str == tensor_names_.input_name) {
+        if (!context_->setTensorAddress(tensor_name, buffers_.device_input)) {
+          throw TensorRTException("Failed to set input tensor address: " + name_str);
+        }
+      }
+    } else if (mode == nvinfer1::TensorIOMode::kOUTPUT) {
+      void* tensor_address = nullptr;
+
+      // Set addresses for known output tensors
+      if (name_str == tensor_names_.cls_logits_name) {
+        tensor_address = buffers_.device_cls_logits;
+      } else if (name_str == tensor_names_.bbox_regression_name) {
+        tensor_address = buffers_.device_bbox_regression;
+      } else if (name_str == tensor_names_.bbox_ctrness_name) {
+        tensor_address = buffers_.device_bbox_ctrness;
+      } else if (name_str == tensor_names_.anchors_name) {
+        tensor_address = buffers_.device_anchors;
+      } else if (name_str == tensor_names_.image_sizes_name) {
+        tensor_address = buffers_.device_image_sizes;
+      } else if (name_str == tensor_names_.original_image_sizes_name) {
+        tensor_address = buffers_.device_original_image_sizes;
+      } else if (name_str == tensor_names_.num_anchors_per_level_name) {
+        tensor_address = buffers_.device_num_anchors_per_level;
+      } else {
+        // Handle unknown output tensors by allocating dummy buffers
+        std::cout << "Warning: Unknown output tensor '" << name_str
+                  << "' - allocating dummy buffer" << std::endl;
+
+        size_t tensor_size = get_tensor_size(name_str);
+        auto dims = engine_->getTensorShape(tensor_name);
+        nvinfer1::DataType data_type = engine_->getTensorDataType(tensor_name);
+
+        size_t element_size = 4; // Default to float
+        if (data_type == nvinfer1::DataType::kINT32) {
+          element_size = sizeof(int32_t);
+        } else if (data_type == nvinfer1::DataType::kFLOAT) {
+          element_size = sizeof(float);
+        } else if (data_type == nvinfer1::DataType::kHALF) {
+          element_size = sizeof(uint16_t);
+        }
+
+        size_t buffer_size = tensor_size * element_size;
+        void* dummy_buffer;
+        CUDA_CHECK(cudaMalloc(&dummy_buffer, buffer_size));
+        buffers_.additional_device_buffers.push_back(dummy_buffer);
+        tensor_address = dummy_buffer;
+      }
+
+      if (!context_->setTensorAddress(tensor_name, tensor_address)) {
+        throw TensorRTException("Failed to set output tensor address: " + name_str);
+      }
+    }
   }
-  if (!context_->setTensorAddress(tensor_names_.cls_logits_name.c_str(), buffers_.device_cls_logits)) {
-    throw TensorRTException("Failed to set cls_logits tensor address");
-  }
-  if (!context_->setTensorAddress(tensor_names_.bbox_regression_name.c_str(), buffers_.device_bbox_regression)) {
-    throw TensorRTException("Failed to set bbox_regression tensor address");
-  }
-  if (!context_->setTensorAddress(tensor_names_.bbox_ctrness_name.c_str(), buffers_.device_bbox_ctrness)) {
-    throw TensorRTException("Failed to set bbox_ctrness tensor address");
-  }
-  if (!context_->setTensorAddress(tensor_names_.anchors_name.c_str(), buffers_.device_anchors)) {
-    throw TensorRTException("Failed to set anchors tensor address");
-  }
-  if (!context_->setTensorAddress(tensor_names_.image_sizes_name.c_str(), buffers_.device_image_sizes)) {
-    throw TensorRTException("Failed to set image_sizes tensor address");
-  }
-  if (!context_->setTensorAddress(tensor_names_.original_image_sizes_name.c_str(), buffers_.device_original_image_sizes)) {
-    throw TensorRTException("Failed to set original_image_sizes tensor address");
-  }
-  if (!context_->setTensorAddress(tensor_names_.num_anchors_per_level_name.c_str(), buffers_.device_num_anchors_per_level)) {
-    throw TensorRTException("Failed to set num_anchors_per_level tensor address");
+
+  // Log information about additional buffers
+  if (!buffers_.additional_device_buffers.empty()) {
+    std::cout << "Allocated " << buffers_.additional_device_buffers.size()
+              << " additional buffers for unknown tensors" << std::endl;
   }
 }
+
+//void FCOSTrtBackend::initialize_memory()
+//{
+//  // Get tensor dimensions to calculate memory sizes
+//  auto get_tensor_size = [this](const std::string& name) -> size_t {
+//    auto dims = engine_->getTensorShape(name.c_str());
+//    size_t size = 1;
+//    for (int i = 0; i < dims.nbDims; ++i) {
+//      size *= dims.d[i];
+//    }
+//    return size;
+//  };
+
+//  // Calculate memory sizes
+//  memory_sizes_.input_size = 1 * 3 * config_.height * config_.width * sizeof(float);
+//  memory_sizes_.cls_logits_size = get_tensor_size(tensor_names_.cls_logits_name) * sizeof(float);
+//  memory_sizes_.bbox_regression_size = get_tensor_size(tensor_names_.bbox_regression_name) * sizeof(float);
+//  memory_sizes_.bbox_ctrness_size = get_tensor_size(tensor_names_.bbox_ctrness_name) * sizeof(float);
+//  memory_sizes_.anchors_size = get_tensor_size(tensor_names_.anchors_name) * sizeof(float);
+//  memory_sizes_.image_sizes_size = get_tensor_size(tensor_names_.image_sizes_name) * sizeof(int32_t);
+//  memory_sizes_.original_image_sizes_size = get_tensor_size(tensor_names_.original_image_sizes_name) * sizeof(int32_t);
+//  memory_sizes_.num_anchors_per_level_size = get_tensor_size(tensor_names_.num_anchors_per_level_name) * sizeof(int32_t);
+
+//  // Calculate model dimensions
+//  num_anchors_ = static_cast<int>(memory_sizes_.cls_logits_size / sizeof(float) / config_.num_classes);
+//  num_levels_ = static_cast<int>(memory_sizes_.num_anchors_per_level_size / sizeof(int32_t));
+
+//  // Allocate pinned host memory
+//  CUDA_CHECK(cudaMallocHost(&buffers_.pinned_input, memory_sizes_.input_size));
+
+//  // Allocate device memory
+//  CUDA_CHECK(cudaMalloc(&buffers_.device_input, memory_sizes_.input_size));
+//  CUDA_CHECK(cudaMalloc(&buffers_.device_temp_buffer, memory_sizes_.input_size));
+//  CUDA_CHECK(cudaMalloc(&buffers_.device_cls_logits, memory_sizes_.cls_logits_size));
+//  CUDA_CHECK(cudaMalloc(&buffers_.device_bbox_regression, memory_sizes_.bbox_regression_size));
+//  CUDA_CHECK(cudaMalloc(&buffers_.device_bbox_ctrness, memory_sizes_.bbox_ctrness_size));
+//  CUDA_CHECK(cudaMalloc(&buffers_.device_anchors, memory_sizes_.anchors_size));
+//  CUDA_CHECK(cudaMalloc(&buffers_.device_image_sizes, memory_sizes_.image_sizes_size));
+//  CUDA_CHECK(cudaMalloc(&buffers_.device_original_image_sizes, memory_sizes_.original_image_sizes_size));
+//  CUDA_CHECK(cudaMalloc(&buffers_.device_num_anchors_per_level, memory_sizes_.num_anchors_per_level_size));
+
+//  // Allocate host memory for outputs
+//  CUDA_CHECK(cudaMallocHost(&buffers_.host_cls_logits, memory_sizes_.cls_logits_size));
+//  CUDA_CHECK(cudaMallocHost(&buffers_.host_bbox_regression, memory_sizes_.bbox_regression_size));
+//  CUDA_CHECK(cudaMallocHost(&buffers_.host_bbox_ctrness, memory_sizes_.bbox_ctrness_size));
+//  CUDA_CHECK(cudaMallocHost(&buffers_.host_anchors, memory_sizes_.anchors_size));
+//  CUDA_CHECK(cudaMallocHost(&buffers_.host_image_sizes, memory_sizes_.image_sizes_size));
+//  CUDA_CHECK(cudaMallocHost(&buffers_.host_original_image_sizes, memory_sizes_.original_image_sizes_size));
+//  CUDA_CHECK(cudaMallocHost(&buffers_.host_num_anchors_per_level, memory_sizes_.num_anchors_per_level_size));
+
+//  // Set tensor addresses for ALL tensors (both known and unknown)
+//  std::vector<void*> additional_buffers; // To track additional allocations
+
+//  for (int i = 0; i < engine_->getNbIOTensors(); ++i) {
+//    const char* tensor_name = engine_->getIOTensorName(i);
+//    nvinfer1::TensorIOMode mode = engine_->getTensorIOMode(tensor_name);
+//    std::string name_str(tensor_name);
+
+//    if (mode == nvinfer1::TensorIOMode::kINPUT) {
+//      if (name_str == tensor_names_.input_name) {
+//        if (!context_->setTensorAddress(tensor_name, buffers_.device_input)) {
+//          throw TensorRTException("Failed to set input tensor address: " + name_str);
+//        }
+//      }
+//    } else if (mode == nvinfer1::TensorIOMode::kOUTPUT) {
+//      void* tensor_address = nullptr;
+
+//      // Set addresses for known output tensors
+//      if (name_str == tensor_names_.cls_logits_name) {
+//        tensor_address = buffers_.device_cls_logits;
+//      } else if (name_str == tensor_names_.bbox_regression_name) {
+//        tensor_address = buffers_.device_bbox_regression;
+//      } else if (name_str == tensor_names_.bbox_ctrness_name) {
+//        tensor_address = buffers_.device_bbox_ctrness;
+//      } else if (name_str == tensor_names_.anchors_name) {
+//        tensor_address = buffers_.device_anchors;
+//      } else if (name_str == tensor_names_.image_sizes_name) {
+//        tensor_address = buffers_.device_image_sizes;
+//      } else if (name_str == tensor_names_.original_image_sizes_name) {
+//        tensor_address = buffers_.device_original_image_sizes;
+//      } else if (name_str == tensor_names_.num_anchors_per_level_name) {
+//        tensor_address = buffers_.device_num_anchors_per_level;
+//      } else {
+//        // Handle unknown output tensors by allocating dummy buffers
+//        std::cout << "Warning: Unknown output tensor '" << name_str
+//                  << "' - allocating dummy buffer" << std::endl;
+
+//        size_t tensor_size = get_tensor_size(name_str);
+//        auto dims = engine_->getTensorShape(tensor_name);
+//        nvinfer1::DataType data_type = engine_->getTensorDataType(tensor_name);
+
+//        size_t element_size = 4; // Default to float
+//        if (data_type == nvinfer1::DataType::kINT32) {
+//          element_size = sizeof(int32_t);
+//        } else if (data_type == nvinfer1::DataType::kFLOAT) {
+//          element_size = sizeof(float);
+//        } else if (data_type == nvinfer1::DataType::kHALF) {
+//          element_size = sizeof(uint16_t);
+//        }
+
+//        size_t buffer_size = tensor_size * element_size;
+//        void* dummy_buffer;
+//        CUDA_CHECK(cudaMalloc(&dummy_buffer, buffer_size));
+//        additional_buffers.push_back(dummy_buffer);
+//        tensor_address = dummy_buffer;
+//      }
+
+//      if (!context_->setTensorAddress(tensor_name, tensor_address)) {
+//        throw TensorRTException("Failed to set output tensor address: " + name_str);
+//      }
+//    }
+//  }
+
+//  // Store additional buffers for cleanup
+//  if (!additional_buffers.empty()) {
+//    // You'll need to add this to your class to track additional buffers for cleanup
+//    // For now, we'll accept the small memory leak since this is initialization code
+//    std::cout << "Allocated " << additional_buffers.size()
+//              << " additional buffers for unknown tensors" << std::endl;
+//  }
+//}
 
 void FCOSTrtBackend::initialize_streams()
 {
@@ -285,6 +448,12 @@ void FCOSTrtBackend::cleanup() noexcept
   if (buffers_.device_image_sizes) cudaFree(buffers_.device_image_sizes);
   if (buffers_.device_original_image_sizes) cudaFree(buffers_.device_original_image_sizes);
   if (buffers_.device_num_anchors_per_level) cudaFree(buffers_.device_num_anchors_per_level);
+
+  // Free additional device buffers
+  for (void* buffer : buffers_.additional_device_buffers) {
+    if (buffer) cudaFree(buffer);
+  }
+  buffers_.additional_device_buffers.clear();
 
   // Reset all pointers
   buffers_ = MemoryBuffers{};

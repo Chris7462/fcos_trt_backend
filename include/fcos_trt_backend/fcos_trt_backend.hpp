@@ -206,6 +206,9 @@ private:
     int32_t * host_original_image_sizes;
     int32_t * host_num_anchors_per_level;
 
+    // Additional buffers for unknown tensors
+    std::vector<void*> additional_device_buffers;
+
     MemoryBuffers() : pinned_input(nullptr), device_input(nullptr),
                       device_temp_buffer(nullptr), device_cls_logits(nullptr),
                       device_bbox_regression(nullptr), device_bbox_ctrness(nullptr),

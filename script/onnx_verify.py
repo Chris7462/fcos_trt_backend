@@ -1,5 +1,4 @@
 import torch
-import torchvision
 from torchvision.models.detection import fcos_resnet50_fpn, FCOS_ResNet50_FPN_Weights
 from torchvision.ops import boxes as box_ops
 from collections import OrderedDict
