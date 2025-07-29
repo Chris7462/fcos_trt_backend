@@ -46,18 +46,11 @@ class FCOSBackbone(torch.nn.Module):
         # Get predictions from head
         head_outputs = self.head(features_list)
 
-        # Calculate num_anchors_per_level for consistency with original forward
-        num_anchors_per_level = [x.size(2) * x.size(3) for x in features_list]
-
         # Return raw outputs without NMS post-processing
         return {
             'cls_logits': head_outputs['cls_logits'],
             'bbox_regression': head_outputs['bbox_regression'],
-            'bbox_ctrness': head_outputs['bbox_ctrness'],
-            'anchors': anchors,
-            'image_sizes': images.image_sizes,
-            'original_image_sizes': original_image_sizes,
-            'num_anchors_per_level': num_anchors_per_level  # Added for completeness
+            'bbox_ctrness': head_outputs['bbox_ctrness']
         }
 
 ap = argparse.ArgumentParser()
@@ -79,18 +72,6 @@ print("Creating pretrained FCOS backbone model...")
 model = FCOSBackbone()
 model.eval()
 
-# Load image using OpenCV and convert to RGB
-image_path = 'fcos_torch_backend/script/image_000.png'
-image_bgr = cv2.imread(image_path)
-image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
-
-# Convert image to tensor and normalize
-image_tensor = to_tensor(image_rgb).unsqueeze(0)  # Shape: [1, 3, H, W]
-
-# Run the model
-with torch.no_grad():
-    outputs = model(image_tensor)
-
 # Create dummy input - note: input should be a list of tensors for proper transform handling
 height, width = args['height'], args['width']
 dummy_input = [torch.randn(3, height, width)]  # List of tensors, not batched tensor
@@ -111,11 +92,7 @@ torch.onnx.export(
     output_names=[
         'cls_logits',
         'bbox_regression',
-        'bbox_ctrness',
-        'anchors',
-        'image_sizes',
-        'original_image_sizes',
-        'num_anchors_per_level'
+        'bbox_ctrness'
     ],
     # Note: Dynamic axes might be tricky with list inputs and anchor generation
     # Consider using fixed batch size for more reliable ONNX export

@@ -11,7 +11,7 @@ import cv2
 import matplotlib.pyplot as plt
 
 
-class FCOSBackboneOnly(torch.nn.Module):
+class FCOSBackbone(torch.nn.Module):
     def __init__(self):
         super().__init__()
         # Load pretrained FCOS model
@@ -49,18 +49,11 @@ class FCOSBackboneOnly(torch.nn.Module):
         # Get predictions from head
         head_outputs = self.head(features_list)
 
-        # Calculate num_anchors_per_level for consistency with original forward
-        num_anchors_per_level = [x.size(2) * x.size(3) for x in features_list]
-
         # Return raw outputs without NMS post-processing
         return {
             'cls_logits': head_outputs['cls_logits'],
             'bbox_regression': head_outputs['bbox_regression'],
-            'bbox_ctrness': head_outputs['bbox_ctrness'],
-            'anchors': anchors,
-            'image_sizes': images.image_sizes,
-            'original_image_sizes': original_image_sizes,
-            'num_anchors_per_level': num_anchors_per_level
+            'bbox_ctrness': head_outputs['bbox_ctrness']
         }
 
 
@@ -84,7 +77,7 @@ class FCOSPostProcessor:
         num_anchors_per_level: List[int]
     ) -> List[Dict[str, torch.Tensor]]:
         """
-        Postprocess the raw outputs from FCOSBackboneOnly to get final detections
+        Postprocess the raw outputs from FCOSBackbone to get final detections
         """
         num_images = len(image_sizes)
         detections: List[Dict[str, torch.Tensor]] = []
@@ -161,6 +154,50 @@ class FCOSPostProcessor:
 
         return detections
 
+
+# Helper class to capture intermediate outputs from original FCOS model
+class FCOSInterceptor(torch.nn.Module):
+    def __init__(self, original_model):
+        super().__init__()
+        self.model = original_model
+
+    def forward(self, images):
+        # Store original image sizes before transformation
+        original_image_sizes = []
+        for img in images:
+            val = img.shape[-2:]
+            original_image_sizes.append((val[0], val[1]))
+
+        # Apply transforms (normalization, resizing)
+        images, _ = self.model.transform(images, None)
+
+        # Extract features using backbone
+        features = self.model.backbone(images.tensors)
+        if isinstance(features, torch.Tensor):
+            features = OrderedDict([("0", features)])
+
+        features_list = list(features.values())
+
+        # Generate anchors
+        anchors = self.model.anchor_generator(images, features_list)
+
+        # Get head outputs
+        head_outputs = self.model.head(features_list)
+
+        # Calculate num_anchors_per_level
+        num_anchors_per_level = [x.size(2) * x.size(3) for x in features_list]
+
+        return {
+            'cls_logits': head_outputs['cls_logits'],
+            'bbox_regression': head_outputs['bbox_regression'],
+            'bbox_ctrness': head_outputs['bbox_ctrness'],
+            'anchors': anchors,
+            'image_sizes': images.image_sizes,
+            'original_image_sizes': original_image_sizes,
+            'num_anchors_per_level': num_anchors_per_level
+        }
+
+
 # COCO class labels (from your plotting script)
 COCO_INSTANCE_CATEGORY_NAMES = [
     '__background__', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
@@ -225,7 +262,7 @@ def visualize_comparison(image_path, original_results, custom_results, confidenc
     original_plot = plot_detections(image_path, original_results[0], "Original FCOS", confidence_threshold)
 
     # Plot custom results
-    custom_plot = plot_detections(image_path, custom_results[0], "Custom FCOSBackboneOnly", confidence_threshold)
+    custom_plot = plot_detections(image_path, custom_results[0], "Custom FCOSBackbone", confidence_threshold)
 
     if original_plot is not None and custom_plot is not None:
         # Create side-by-side comparison
@@ -236,7 +273,7 @@ def visualize_comparison(image_path, original_results, custom_results, confidenc
         ax1.axis('off')
 
         ax2.imshow(custom_plot)
-        ax2.set_title('Custom FCOSBackboneOnly + PostProcessor', fontsize=14, fontweight='bold')
+        ax2.set_title('Custom FCOSBackbone + PostProcessor', fontsize=14, fontweight='bold')
         ax2.axis('off')
 
         plt.tight_layout()
@@ -256,12 +293,11 @@ def visualize_comparison(image_path, original_results, custom_results, confidenc
 
 
 def compare_models():
-    """Compare FCOSBackboneOnly + PostProcessor vs Original FCOS"""
+    """Compare FCOSBackbone + PostProcessor vs Original FCOS"""
 
     # Set random seed for reproducibility
     torch.manual_seed(42)
     np.random.seed(42)
-
 
     # Load real test image
     test_image_path = "fcos_trt_backend/script/image_000.png"
@@ -296,9 +332,13 @@ def compare_models():
 
     print(f"   Original model - Number of detections: {[len(r['boxes']) for r in original_results]}")
 
-    # 2. FCOSBackboneOnly + PostProcessor
-    print("\n2. Testing FCOSBackboneOnly + PostProcessor...")
-    backbone_model = FCOSBackboneOnly()
+    # 2. FCOSBackbone + PostProcessor
+    print("\n2. Testing FCOSBackbone + PostProcessor...")
+    backbone_model = FCOSBackbone()
+
+    # Get intermediate outputs for post-processing
+    interceptor = FCOSInterceptor(original_model)
+
     post_processor = FCOSPostProcessor(
         score_thresh=original_model.score_thresh,
         nms_thresh=original_model.nms_thresh,
@@ -307,24 +347,27 @@ def compare_models():
     )
 
     with torch.no_grad():
-        # Get raw outputs from backbone
-        raw_outputs = backbone_model(test_images)
+        # Get raw outputs from backbone (simplified)
+        backbone_outputs = backbone_model(test_images)
 
-        # Apply post-processing
+        # Get full intermediate outputs for post-processing
+        full_outputs = interceptor(test_images)
+
+        # Apply post-processing using the additional required data
         custom_results = post_processor.postprocess_detections(
-            cls_logits=raw_outputs['cls_logits'],
-            bbox_regression=raw_outputs['bbox_regression'],
-            bbox_ctrness=raw_outputs['bbox_ctrness'],
-            anchors=raw_outputs['anchors'],
-            image_sizes=raw_outputs['image_sizes'],
-            num_anchors_per_level=raw_outputs['num_anchors_per_level']
+            cls_logits=backbone_outputs['cls_logits'],
+            bbox_regression=backbone_outputs['bbox_regression'],
+            bbox_ctrness=backbone_outputs['bbox_ctrness'],
+            anchors=full_outputs['anchors'],
+            image_sizes=full_outputs['image_sizes'],
+            num_anchors_per_level=full_outputs['num_anchors_per_level']
         )
 
         # Apply transform postprocess to get final coordinates
         custom_results = original_model.transform.postprocess(
             custom_results,
-            raw_outputs['image_sizes'],
-            raw_outputs['original_image_sizes']
+            full_outputs['image_sizes'],
+            full_outputs['original_image_sizes']
         )
 
     print(f"   Custom model - Number of detections: {[len(r['boxes']) for r in custom_results]}")
@@ -432,64 +475,33 @@ def detailed_intermediate_comparison():
     original_model.eval()
 
     # Custom model
-    backbone_model = FCOSBackboneOnly()
+    backbone_model = FCOSBackbone()
+    interceptor = FCOSInterceptor(original_model)
 
     with torch.no_grad():
-        # Get intermediate outputs from both models
-        print("\n1. Comparing backbone features...")
+        print("\n1. Comparing backbone and head outputs...")
 
-        # For original model, we need to manually extract intermediate results
-        original_images, _ = original_model.transform(test_image, None)
-        original_features = original_model.backbone(original_images.tensors)
-        if isinstance(original_features, torch.Tensor):
-            original_features = OrderedDict([("0", original_features)])
-        original_features_list = list(original_features.values())
-
-        # Get features from custom model
-        custom_outputs = backbone_model(test_image)
-
-        # Compare transformed images (should be identical)
-        print(f"   Image tensor shapes match: {original_images.tensors.shape}")
-        print(f"   Image sizes: {original_images.image_sizes}")
-
-        # Compare anchor generation
-        original_anchors = original_model.anchor_generator(original_images, original_features_list)
-        print(f"   Original anchors type: {type(original_anchors[0])}")
-        print(f"   Custom anchors type: {type(custom_outputs['anchors'][0])}")
-
-        # Handle different anchor formats
-        if isinstance(original_anchors[0], list):
-            print(f"   Anchors shapes - Original: {[a.shape for a in original_anchors[0]]}")
-            original_anchors_concat = torch.cat(original_anchors[0])
-        else:
-            print(f"   Anchors shape - Original: {original_anchors[0].shape}")
-            original_anchors_concat = original_anchors[0]
-
-        if isinstance(custom_outputs['anchors'][0], list):
-            print(f"   Anchors shapes - Custom: {[a.shape for a in custom_outputs['anchors'][0]]}")
-            custom_anchors_concat = torch.cat(custom_outputs['anchors'][0])
-        else:
-            print(f"   Anchors shape - Custom: {custom_outputs['anchors'][0].shape}")
-            custom_anchors_concat = custom_outputs['anchors'][0]
-
-        anchor_diff = torch.abs(original_anchors_concat - custom_anchors_concat).max()
-        print(f"   Max anchor difference: {anchor_diff:.8f}")
+        # Get outputs from both models
+        backbone_outputs = backbone_model(test_image)
+        full_outputs = interceptor(test_image)
 
         # Compare head outputs
-        original_head_outputs = original_model.head(original_features_list)
+        cls_diff = torch.abs(full_outputs['cls_logits'] - backbone_outputs['cls_logits']).max()
+        bbox_diff = torch.abs(full_outputs['bbox_regression'] - backbone_outputs['bbox_regression']).max()
+        ctr_diff = torch.abs(full_outputs['bbox_ctrness'] - backbone_outputs['bbox_ctrness']).max()
 
-        cls_diff = torch.abs(original_head_outputs['cls_logits'] - custom_outputs['cls_logits']).max()
-        bbox_diff = torch.abs(original_head_outputs['bbox_regression'] - custom_outputs['bbox_regression']).max()  
-        ctr_diff = torch.abs(original_head_outputs['bbox_ctrness'] - custom_outputs['bbox_ctrness']).max()
+        print(f" cls_logits = {backbone_outputs['cls_logits']}")
+        print(f" bbox_regression = {backbone_outputs['bbox_regression']}")
+        print(f" bbox_ctrness = {backbone_outputs['bbox_ctrness']}")
 
         print(f"   Max cls_logits difference: {cls_diff:.8f}")
         print(f"   Max bbox_regression difference: {bbox_diff:.8f}")
         print(f"   Max bbox_ctrness difference: {ctr_diff:.8f}")
 
-        if max(anchor_diff, cls_diff, bbox_diff, ctr_diff) < 1e-6:
-            print("   ✅ All intermediate outputs are identical!")
+        if max(cls_diff, bbox_diff, ctr_diff) < 1e-6:
+            print("   ✅ All head outputs are identical!")
         else:
-            print("   ⚠️  Some small differences in intermediate outputs")
+            print("   ⚠️  Some small differences in head outputs")
 
 
 if __name__ == "__main__":
@@ -505,6 +517,6 @@ if __name__ == "__main__":
     visualize_comparison(test_image_path, original_results, custom_results, confidence_threshold=0.6)
 
     print("\n=== Test Complete ===")
-    print("If the models produce nearly identical results, your FCOSBackboneOnly")
+    print("If the models produce nearly identical results, your FCOSBackbone")
     print("implementation is correct and ready for ONNX export!")
     print("Check 'fcos_comparison.png' for the visual comparison of detection results.")
