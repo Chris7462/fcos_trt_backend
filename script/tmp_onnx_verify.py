@@ -3,7 +3,7 @@ from torchvision.models.detection import fcos_resnet50_fpn, FCOS_ResNet50_FPN_We
 from collections import OrderedDict
 
 
-class FCOSBackboneOnly(torch.nn.Module):
+class FCOSBackbone(torch.nn.Module):
     def __init__(self):
         super().__init__()
         # Load pretrained FCOS model
@@ -16,12 +16,6 @@ class FCOSBackboneOnly(torch.nn.Module):
         self.transform = self.model.transform
 
     def forward(self, images):
-        # Store original image sizes before transformation
-        original_image_sizes = []
-        for img in images:
-            val = img.shape[-2:]
-            original_image_sizes.append((val[0], val[1]))
-
         # Apply transforms (normalization, resizing)
         images, _ = self.transform(images, None)
 
@@ -41,20 +35,25 @@ class FCOSBackboneOnly(torch.nn.Module):
         # Get predictions from head
         head_outputs = self.head(features_list)
 
-        # Calculate num_anchors_per_level for consistency with original forward
-        num_anchors_per_level = [x.size(2) * x.size(3) for x in features_list]
-
         # Return raw outputs without NMS post-processing
         return {
             'cls_logits': head_outputs['cls_logits'],
             'bbox_regression': head_outputs['bbox_regression'],
             'bbox_ctrness': head_outputs['bbox_ctrness'],
-            'anchors': anchors,
-            'image_sizes': images.image_sizes,
-            'original_image_sizes': original_image_sizes,
-            'num_anchors_per_level': num_anchors_per_level
+            'anchors': anchors
         }
 
+def print_tensor_stats(tensor, name):
+    """Print statistics for a tensor"""
+    flat_tensor = tensor.flatten()
+    print(f"\n{name} Statistics:")
+    print(f"  Shape: {tensor.shape}")
+    print(f"  Size: {tensor.size}")
+    print(f"  Min: {flat_tensor.min():.8f}")
+    print(f"  Max: {flat_tensor.max():.8f}")
+    print(f"  Mean: {flat_tensor.mean():.8f}")
+    print(f"  Std: {flat_tensor.std():.8f}")
+    print(f"  First 10 values: {flat_tensor[:10].tolist()}")
 
 def detailed_intermediate_results():
     """Show intermediate outputs to identify where differences might occur"""
@@ -87,7 +86,7 @@ def detailed_intermediate_results():
     original_model.eval()
 
     # Custom model
-    backbone_model = FCOSBackboneOnly()
+    backbone_model = FCOSBackbone()
 
     with torch.no_grad():
         # Get intermediate outputs from both models
@@ -105,7 +104,6 @@ def detailed_intermediate_results():
 
         # Compare transformed images (should be identical)
         print(f"   Image tensor shapes match: {original_images.tensors.shape}")
-        print(f"   Image sizes: {original_images.image_sizes}")
 
         # Compare anchor generation
         original_anchors = original_model.anchor_generator(original_images, original_features_list)
@@ -133,6 +131,11 @@ def detailed_intermediate_results():
         # Compare head outputs
         original_head_outputs = original_model.head(original_features_list)
 
+        # Print detailed statistics
+        print_tensor_stats(custom_outputs['cls_logits'], "PyTorch cls_logits")
+        print_tensor_stats(custom_outputs['bbox_regression'], "PyTorch bbox_regression")
+        print_tensor_stats(custom_outputs['bbox_ctrness'], "PyTorch bbox_ctrness")
+
         cls_diff = torch.abs(original_head_outputs['cls_logits'] - custom_outputs['cls_logits']).max()
         bbox_diff = torch.abs(original_head_outputs['bbox_regression'] - custom_outputs['bbox_regression']).max()
         ctr_diff = torch.abs(original_head_outputs['bbox_ctrness'] - custom_outputs['bbox_ctrness']).max()
@@ -149,10 +152,10 @@ def detailed_intermediate_results():
 
 if __name__ == "__main__":
     # Run detailed intermediate comparison
-    detailed_intermediate_results
+    detailed_intermediate_results()
 
     test_image_path = "script/image_000.png"
 
     print("\n=== Test Complete ===")
-    print("If the models produce nearly identical results, your FCOSBackboneOnly")
+    print("If the models produce nearly identical results, your FCOSBackbone")
     print("implementation is correct and ready for ONNX export!")

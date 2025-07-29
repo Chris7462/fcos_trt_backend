@@ -21,12 +21,6 @@ class FCOSBackbone(torch.nn.Module):
         self.transform = self.model.transform
 
     def forward(self, images):
-        # Store original image sizes before transformation
-        original_image_sizes = []
-        for img in images:
-            val = img.shape[-2:]
-            original_image_sizes.append((val[0], val[1]))
-
         # Apply transforms (normalization, resizing)
         images, _ = self.transform(images, None)
 
@@ -39,9 +33,6 @@ class FCOSBackbone(torch.nn.Module):
 
         # Convert to list as expected by head and anchor_generator
         features_list = list(features.values())
-
-        # Generate anchors - pass both images and features
-        anchors = self.anchor_generator(images, features_list)
 
         # Get predictions from head
         head_outputs = self.head(features_list)
