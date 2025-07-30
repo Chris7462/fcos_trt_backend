@@ -48,10 +48,15 @@ message(STATUS "             ${TENSORRT_LIBRARY_PARSER}")
 
 # Create executable
 add_executable(fcos_inference
+  src/fcos_trt_backend.cpp
   src/main.cpp)
 
 # Include directories
-target_include_directories(fcos_inference PRIVATE
+target_include_directories(fcos_inference
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+  PRIVATE
     ${OpenCV_INCLUDE_DIRS}
     ${TENSORRT_INCLUDE_DIR}
     ${CUDA_INCLUDE_DIRS}
