@@ -33,7 +33,7 @@ void Logger::log(Severity severity, const char * msg) noexcept
 
 // FCOSTrtBackend implementation
 FCOSTrtBackend::FCOSTrtBackend(const std::string & engine_path, const Config & config)
-: config_(config), stream_(nullptr)
+: config_(config)
 {
   try {
     initialize_engine(engine_path);
@@ -159,6 +159,9 @@ void FCOSTrtBackend::initialize_memory()
   }
   bbox_ctrness_size_ *= sizeof(float);
 
+  // Allocate pinned host memory
+  CUDA_CHECK(cudaMallocHost(&buffers_.pinned_input, input_size_));
+
   // Allocate GPU memory
   CUDA_CHECK(cudaMalloc(&buffers_.device_input, input_size_));
   CUDA_CHECK(cudaMalloc(&buffers_.device_cls_logits, cls_logits_size_));
@@ -166,16 +169,20 @@ void FCOSTrtBackend::initialize_memory()
   CUDA_CHECK(cudaMalloc(&buffers_.device_bbox_ctrness, bbox_ctrness_size_));
 
   // Set tensor addresses for the new TensorRT API
-  if (!context_->setTensorAddress(input_name_.c_str(), buffers_.device_input)) {
+  if (!context_->setTensorAddress(input_name_.c_str(),
+    static_cast<void *>(buffers_.device_input))) {
     throw TensorRTException("Failed to set input tensor address");
   }
-  if (!context_->setTensorAddress(cls_logits_name_.c_str(), buffers_.device_cls_logits)) {
+  if (!context_->setTensorAddress(cls_logits_name_.c_str(),
+    static_cast<void *>(buffers_.device_cls_logits))) {
     throw TensorRTException("Failed to set cls_logits tensor address");
   }
-  if (!context_->setTensorAddress(bbox_regression_name_.c_str(), buffers_.device_bbox_regression)) {
+  if (!context_->setTensorAddress(bbox_regression_name_.c_str(),
+    static_cast<void *>(buffers_.device_bbox_regression))) {
     throw TensorRTException("Failed to set bbox_regression tensor address");
   }
-  if (!context_->setTensorAddress(bbox_ctrness_name_.c_str(), buffers_.device_bbox_ctrness)) {
+  if (!context_->setTensorAddress(bbox_ctrness_name_.c_str(),
+    static_cast<void *>(buffers_.device_bbox_ctrness))) {
     throw TensorRTException("Failed to set bbox_ctrness tensor address");
   }
 }
@@ -190,6 +197,11 @@ void FCOSTrtBackend::initialize_streams()
 
 void FCOSTrtBackend::cleanup() noexcept
 {
+  // Free pinned host memory
+  if (buffers_.pinned_input) {
+    cudaFreeHost(buffers_.pinned_input);
+  }
+
   // Free device memory
   if (buffers_.device_input) {
     cudaFree(buffers_.device_input);
@@ -334,5 +346,32 @@ void FCOSTrtBackend::print_results(const DetectionResults & results)
   calc_stats(results.bbox_regression, "BBOX_REGRESSION");
   calc_stats(results.bbox_ctrness, "BBOX_CTRNESS");
 }
+
+/*
+// Much simpler CUDA preprocessing - follows the same pattern as CPU version
+void FCOSTrtBackend::preprocess_image(
+  const cv::Mat & image, float * output, cudaStream_t stream) const
+{
+  // Step 1: Resize image using OpenCV (on CPU)
+  // Create cv::Mat that directly uses pinned memory
+  cv::Mat img_wrapper(config_.height, config_.width, CV_32FC3, buffers_.pinned_input);
+  cv::resize(image, img_wrapper, cv::Size(config_.width, config_.height));
+
+  // Step 2: Convert to float (on CPU)
+  img_wrapper.convertTo(img_wrapper, CV_32FC3, 1.0f / 255.0f);
+
+  // Step 3: Upload resized float image to GPU
+  CUDA_CHECK(cudaMemcpyAsync(buffers_.device_temp_buffer, img_wrapper.data,
+    input_size_, cudaMemcpyHostToDevice, stream));
+
+  // Step 4: Launch simple normalization kernel
+  launch_normalize_kernel(
+    buffers_.device_temp_buffer,
+    output,
+    config_.width, config_.height,
+    stream);
+}
+*/
+
 
 } // namespace fcos_trt_backend

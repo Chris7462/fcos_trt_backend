@@ -108,7 +108,8 @@ private:
 
   // Helper methods
   std::vector<uint8_t> load_engine_file(const std::string & engine_path) const;
-  cv::Mat preprocess_image(const cv::Mat & image) const;
+  //cv::Mat preprocess_image(const cv::Mat & image) const;
+  void preprocess_image(const cv::Mat & image, float * output, cudaStream_t stream) const;
 
 private:
   // Configuration
@@ -120,33 +121,33 @@ private:
   std::unique_ptr<nvinfer1::ICudaEngine> engine_;
   std::unique_ptr<nvinfer1::IExecutionContext> context_;
 
-  // Tensor names
+  // Tensor information
   std::string input_name_;
   std::string cls_logits_name_;
   std::string bbox_regression_name_;
   std::string bbox_ctrness_name_;
-
-  // Memory buffers
-  struct MemoryBuffers
-  {
-    void * device_input;
-    void * device_cls_logits;
-    void * device_bbox_regression;
-    void * device_bbox_ctrness;
-
-    MemoryBuffers()
-    : device_input(nullptr), device_cls_logits(nullptr),
-      device_bbox_regression(nullptr), device_bbox_ctrness(nullptr) {}
-  } buffers_;
-
-  // CUDA stream
-  cudaStream_t stream_;
-
-  // Buffer sizes
   size_t input_size_;
   size_t cls_logits_size_;
   size_t bbox_regression_size_;
   size_t bbox_ctrness_size_;
+
+  // Memory buffers
+  struct MemoryBuffers
+  {
+    float * pinned_input;
+    float * device_input;
+    float * device_cls_logits;
+    float * device_bbox_regression;
+    float * device_bbox_ctrness;
+
+    MemoryBuffers()
+    : pinned_input(nullptr), device_input(nullptr),
+      device_cls_logits(nullptr), device_bbox_regression(nullptr),
+      device_bbox_ctrness(nullptr) {}
+  } buffers_;
+
+  // CUDA stream
+  cudaStream_t stream_;
 };
 
 } // namespace fcos_trt_backend
