@@ -9,6 +9,7 @@
 // local header files: This project includes local header files.
 #include "fcos_trt_backend/exception.hpp"
 #include "fcos_trt_backend/fcos_trt_backend.hpp"
+#include "fcos_trt_backend/normalize_kernel.hpp"
 
 
 namespace fcos_trt_backend
@@ -40,6 +41,7 @@ FCOSTrtBackend::FCOSTrtBackend(const std::string & engine_path, const Config & c
     find_tensor_names();
     initialize_memory();
     initialize_streams();
+    initialize_constants();
   } catch (const std::exception & e) {
     cleanup();
     throw TensorRTException("Initialization failed: " + std::string(e.what()));
@@ -167,6 +169,7 @@ void FCOSTrtBackend::initialize_memory()
   CUDA_CHECK(cudaMalloc(&buffers_.device_cls_logits, cls_logits_size_));
   CUDA_CHECK(cudaMalloc(&buffers_.device_bbox_regression, bbox_regression_size_));
   CUDA_CHECK(cudaMalloc(&buffers_.device_bbox_ctrness, bbox_ctrness_size_));
+  CUDA_CHECK(cudaMalloc(&buffers_.device_temp_buffer, input_size_));
 
   // Set tensor addresses for the new TensorRT API
   if (!context_->setTensorAddress(input_name_.c_str(),
@@ -195,6 +198,12 @@ void FCOSTrtBackend::initialize_streams()
   }
 }
 
+void FCOSTrtBackend::initialize_constants()
+{
+  // Initialize CUDA constant memory once
+  initialize_mean_std_constants();
+}
+
 void FCOSTrtBackend::cleanup() noexcept
 {
   // Free pinned host memory
@@ -206,14 +215,21 @@ void FCOSTrtBackend::cleanup() noexcept
   if (buffers_.device_input) {
     cudaFree(buffers_.device_input);
   }
+
   if (buffers_.device_cls_logits) {
     cudaFree(buffers_.device_cls_logits);
   }
+
   if (buffers_.device_bbox_regression) {
     cudaFree(buffers_.device_bbox_regression);
   }
+
   if (buffers_.device_bbox_ctrness) {
     cudaFree(buffers_.device_bbox_ctrness);
+  }
+
+  if (buffers_.device_temp_buffer) {
+    cudaFree(buffers_.device_temp_buffer);
   }
 
   // Reset all pointers to nullptr
@@ -226,44 +242,47 @@ void FCOSTrtBackend::cleanup() noexcept
   }
 }
 
-cv::Mat FCOSTrtBackend::preprocess_image(const cv::Mat & image) const
-{
-  cv::Mat processed;
+//cv::Mat FCOSTrtBackend::preprocess_image(const cv::Mat & image) const
+//{
+//  cv::Mat processed;
 
-  // Convert BGR to RGB
-  cv::cvtColor(image, processed, cv::COLOR_BGR2RGB);
+//  // Convert BGR to RGB
+//  cv::cvtColor(image, processed, cv::COLOR_BGR2RGB);
 
-  // Resize to input dimensions
-  cv::resize(processed, processed, cv::Size(config_.width, config_.height));
+//  // Resize to input dimensions
+//  cv::resize(processed, processed, cv::Size(config_.width, config_.height));
 
-  // Convert to float and normalize to [0, 1]
-  processed.convertTo(processed, CV_32F, 1.0 / 255.0);
+//  // Convert to float and normalize to [0, 1]
+//  processed.convertTo(processed, CV_32F, 1.0 / 255.0);
 
-  return processed;
-}
+//  return processed;
+//}
 
 FCOSTrtBackend::DetectionResults FCOSTrtBackend::infer(const cv::Mat & image)
 {
-  // Preprocess image
-  cv::Mat processed_image = preprocess_image(image);
+//// Preprocess image
+//cv::Mat processed_image = preprocess_image(image);
 
-  // Convert to CHW format and copy to GPU
-  std::vector<float> input_data(config_.channels * config_.height * config_.width);
+//// Convert to CHW format and copy to GPU
+//std::vector<float> input_data(config_.channels * config_.height * config_.width);
 
-  // OpenCV image is HWC, we need CHW
-  for (int c = 0; c < config_.channels; c++) {
-    for (int h = 0; h < config_.height; h++) {
-      for (int w = 0; w < config_.width; w++) {
-        int chw_idx = c * config_.height * config_.width + h * config_.width + w;
-        input_data[chw_idx] = processed_image.at<cv::Vec3f>(h, w)[c];
-      }
-    }
-  }
+//// OpenCV image is HWC, we need CHW
+//for (int c = 0; c < config_.channels; c++) {
+//  for (int h = 0; h < config_.height; h++) {
+//    for (int w = 0; w < config_.width; w++) {
+//      int chw_idx = c * config_.height * config_.width + h * config_.width + w;
+//      input_data[chw_idx] = processed_image.at<cv::Vec3f>(h, w)[c];
+//    }
+//  }
+//}
 
-  // Copy input data to GPU
-  CUDA_CHECK(cudaMemcpyAsync(buffers_.device_input, input_data.data(),
-                            input_data.size() * sizeof(float),
-                            cudaMemcpyHostToDevice, stream_));
+//// Copy input data to GPU
+//CUDA_CHECK(cudaMemcpyAsync(buffers_.device_input, input_data.data(),
+//                          input_data.size() * sizeof(float),
+//                          cudaMemcpyHostToDevice, stream_));
+
+  // Preprocess directly into GPU memory
+  preprocess_image(image, buffers_.device_input, stream_);
 
   // Run inference
   if (!context_->enqueueV3(stream_)) {
@@ -347,7 +366,6 @@ void FCOSTrtBackend::print_results(const DetectionResults & results)
   calc_stats(results.bbox_ctrness, "BBOX_CTRNESS");
 }
 
-/*
 // Much simpler CUDA preprocessing - follows the same pattern as CPU version
 void FCOSTrtBackend::preprocess_image(
   const cv::Mat & image, float * output, cudaStream_t stream) const
@@ -371,7 +389,5 @@ void FCOSTrtBackend::preprocess_image(
     config_.width, config_.height,
     stream);
 }
-*/
-
 
 } // namespace fcos_trt_backend

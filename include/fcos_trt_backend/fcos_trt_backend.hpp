@@ -47,11 +47,6 @@ public:
     int width;
 
     /**
-     * @brief Number of input channels
-     */
-    int channels;
-
-    /**
      * @brief Log level for TensorRT messages
      * @details This controls the verbosity of TensorRT logging.
      */
@@ -62,7 +57,7 @@ public:
      * @details Initializes the configuration with default values.
      */
     Config()
-    : height(374), width(1238), channels(3),
+    : height(374), width(1238),
       log_level(Logger::Severity::kWARNING) {}
   };
 
@@ -102,13 +97,13 @@ private:
   void find_tensor_names();
   void initialize_memory();
   void initialize_streams();
+  void initialize_constants();
 
   // Memory management
   void cleanup() noexcept;
 
   // Helper methods
   std::vector<uint8_t> load_engine_file(const std::string & engine_path) const;
-  //cv::Mat preprocess_image(const cv::Mat & image) const;
   void preprocess_image(const cv::Mat & image, float * output, cudaStream_t stream) const;
 
 private:
@@ -139,11 +134,12 @@ private:
     float * device_cls_logits;
     float * device_bbox_regression;
     float * device_bbox_ctrness;
+    float * device_temp_buffer; // For img preprocessing
 
     MemoryBuffers()
     : pinned_input(nullptr), device_input(nullptr),
       device_cls_logits(nullptr), device_bbox_regression(nullptr),
-      device_bbox_ctrness(nullptr) {}
+      device_bbox_ctrness(nullptr), device_temp_buffer(nullptr) {}
   } buffers_;
 
   // CUDA stream
