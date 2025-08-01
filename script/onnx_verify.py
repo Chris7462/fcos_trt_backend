@@ -63,7 +63,7 @@ def detailed_intermediate_results():
     torch.manual_seed(42)
 
     # Load the same test image
-    test_image_path = "script/image_000.png"
+    test_image_path = "test/image_000.png"
 
     try:
         from PIL import Image
