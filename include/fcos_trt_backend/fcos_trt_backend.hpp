@@ -97,14 +97,13 @@ private:
   void find_tensor_names();
   void initialize_memory();
   void initialize_streams();
-  void initialize_constants();
 
   // Memory management
   void cleanup() noexcept;
 
   // Helper methods
   std::vector<uint8_t> load_engine_file(const std::string & engine_path) const;
-  void preprocess_image(const cv::Mat & image, float * output, cudaStream_t stream) const;
+  cv::Mat preprocess_image(const cv::Mat & image) const;
 
 private:
   // Configuration
