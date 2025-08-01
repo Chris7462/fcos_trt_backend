@@ -40,10 +40,11 @@ __global__ void normalize_kernel(
     float pixel_value = input_data[pixel_idx * 3 + c];
 
     // Normalize: (pixel - mean) / std
-    float normalized = (pixel_value - d_mean[c]) / d_std[c];
+    // float normalized = (pixel_value - d_mean[c]) / d_std[c];
 
     // Store in CHW format (channel-first)
-    output_data[c * height * width + pixel_idx] = normalized;
+    // output_data[c * height * width + pixel_idx] = normalized;
+    output_data[c * height * width + pixel_idx] = pixel_value;
   }
 }
 
