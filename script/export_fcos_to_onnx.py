@@ -45,17 +45,17 @@ class FCOSBackbone(torch.nn.Module):
         }
 
 ap = argparse.ArgumentParser()
-ap.add_argument('-o', '--output', type=str, default='models',
-                help='Path to save the exported model')
 ap.add_argument('--height', type=int, default=374,
                 help='Input image height')
 ap.add_argument('--width', type=int, default=1238,
                 help='Input image width')
+ap.add_argument('-o', '--output-dir', type=str, default='onnxs',
+                help='Path to save the exported model')
 args = vars(ap.parse_args())
-#args = {'output': './fcos_trt_backend/models', 'height': 374, 'width': 1238}
+#args = {'output_dir': './fcos_trt_backend/models', 'height': 374, 'width': 1238}
 
 # Create output directory if it doesn't exist
-os.makedirs(args['output'], exist_ok=True)
+os.makedirs(args['output_dir'], exist_ok=True)
 
 # Load pretrained FCOS model
 print("Creating pretrained FCOS backbone model...")
@@ -70,7 +70,7 @@ dummy_input = [torch.randn(3, height, width)]  # List of tensors, not batched te
 print(f"Exporting model with input size: {height}x{width}")
 
 # Export to ONNX (backbone + heads only, no NMS)
-output_path = os.path.join(args['output'], f'fcos_resnet50_fpn_{height}x{width}.onnx')
+output_path = os.path.join(args['output_dir'], f'fcos_resnet50_fpn_{height}x{width}.onnx')
 
 torch.onnx.export(
     model,

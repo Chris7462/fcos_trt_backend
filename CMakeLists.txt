@@ -1,100 +1,157 @@
 cmake_minimum_required(VERSION 3.12)
-project(FCOS_TensorRT)
+project(fcos_trt_backend VERSION 1.0.0 LANGUAGES CXX CUDA)
 
-set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-# Find required packages
-find_package(OpenCV REQUIRED)
-find_package(PkgConfig REQUIRED)
-
-# Find CUDA
-find_package(CUDA REQUIRED)
-enable_language(CUDA)
-
-# Set TensorRT paths (adjust these paths according to your installation)
-set(TENSORRT_ROOT "/usr/local/TensorRT-10.9.0.34" CACHE PATH "TensorRT installation directory")
-
-# Alternative common paths - uncomment the one that matches your installation
-# set(TENSORRT_ROOT "/opt/tensorrt" CACHE PATH "TensorRT installation directory")
-# set(TENSORRT_ROOT "/usr/local/tensorrt" CACHE PATH "TensorRT installation directory")
-
-# Find TensorRT
-find_path(TENSORRT_INCLUDE_DIR NvInfer.h
-    HINTS ${TENSORRT_ROOT} ${CUDA_TOOLKIT_ROOT_DIR}
-    PATH_SUFFIXES include)
-
-find_library(TENSORRT_LIBRARY_INFER nvinfer
-    HINTS ${TENSORRT_ROOT} ${TENSORRT_ROOT}/lib ${CUDA_TOOLKIT_ROOT_DIR}
-    PATH_SUFFIXES lib lib64 lib/x64)
-
-find_library(TENSORRT_LIBRARY_INFER_PLUGIN nvinfer_plugin
-    HINTS ${TENSORRT_ROOT} ${TENSORRT_ROOT}/lib ${CUDA_TOOLKIT_ROOT_DIR}
-    PATH_SUFFIXES lib lib64 lib/x64)
-
-find_library(TENSORRT_LIBRARY_PARSER nvonnxparser
-    HINTS ${TENSORRT_ROOT} ${TENSORRT_ROOT}/lib ${CUDA_TOOLKIT_ROOT_DIR}
-    PATH_SUFFIXES lib lib64 lib/x64)
-
-# Check if TensorRT was found
-if(NOT TENSORRT_INCLUDE_DIR OR NOT TENSORRT_LIBRARY_INFER OR NOT TENSORRT_LIBRARY_PARSER)
-    message(FATAL_ERROR "TensorRT not found! Please set TENSORRT_ROOT to your TensorRT installation directory")
+# Do not set the default build type automatically, leave it to the user
+if(NOT CMAKE_BUILD_TYPE)
+  message(STATUS "No build type specified, defaulting to 'Release'.")
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
 endif()
 
-message(STATUS "Found TensorRT:")
-message(STATUS "  Include: ${TENSORRT_INCLUDE_DIR}")
-message(STATUS "  Libraries: ${TENSORRT_LIBRARY_INFER}")
-message(STATUS "             ${TENSORRT_LIBRARY_PARSER}")
+# Find dependencies
+find_package(ament_cmake REQUIRED)
+find_package(CUDAToolkit REQUIRED)
+find_package(OpenCV REQUIRED)
 
-# Create executable
-add_executable(fcos_inference
+# Find TensorRT using traditional variables (no imported target)
+if(NOT DEFINED TENSORRT_ROOT)
+  set(TENSORRT_ROOT /usr/local/tensorrt)
+endif()
+
+find_path(TENSORRT_INCLUDE_DIR NvInfer.h
+  HINTS ${TENSORRT_ROOT} ${CUDA_TOOLKIT_ROOT_DIR}
+  PATH_SUFFIXES include)
+
+find_library(TENSORRT_LIBRARY nvinfer
+  HINTS ${TENSORRT_ROOT} ${TENSORRT_BUILD} ${CUDA_TOOLKIT_ROOT_DIR}
+  PATH_SUFFIXES lib lib64 lib/x64)
+
+# find_library(TENSORRT_LIBRARY_PLUGIN nvinfer_plugin
+#   HINTS ${TENSORRT_ROOT} ${TENSORRT_BUILD} ${CUDA_TOOLKIT_ROOT_DIR}
+#   PATH_SUFFIXES lib lib64 lib/x64)
+
+# find_library(TENSORRT_LIBRARY_PARSER nvonnxparser
+#   HINTS ${TENSORRT_ROOT} ${TENSORRT_BUILD} ${CUDA_TOOLKIT_ROOT_DIR}
+#   PATH_SUFFIXES lib lib64 lib/x64)
+# Check if TensorRT was found
+
+if(NOT TENSORRT_INCLUDE_DIR OR NOT TENSORRT_LIBRARY)
+  message(FATAL_ERROR "TensorRT not found. Please set TENSORRT_ROOT to the TensorRT installation directory.")
+endif()
+
+# Include model generation logic
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ModelGeneration.cmake)
+
+# Define the library target
+add_executable(fcos_trt_backend
   src/fcos_trt_backend.cpp
   src/main.cpp)
 
-# Include directories
-target_include_directories(fcos_inference
+# Add model generation dependency to the library
+add_model_generation_dependency(fcos_trt_backend)
+
+# Target-specific CUDA architecture (instead of global)
+set_target_properties(fcos_trt_backend PROPERTIES
+  CUDA_SEPARABLE_COMPILATION ON
+  CUDA_RESOLVE_DEVICE_SYMBOLS ON  # Important for separate compilation
+  CUDA_ARCHITECTURES "native"  # Target-specific instead of global
+)
+
+# If native detection fails, fallback to common architectures
+if(NOT CMAKE_CUDA_ARCHITECTURES)
+  set_target_properties(fcos_trt_backend PROPERTIES
+    CUDA_ARCHITECTURES "75;86;89")  # RTX 20xx, 30xx, 40xx series
+endif()
+
+# Specify include directories for the target
+target_include_directories(fcos_trt_backend
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
   PRIVATE
-    ${OpenCV_INCLUDE_DIRS}
+    # Implementation dependencies - not exposed to consumers
     ${TENSORRT_INCLUDE_DIR}
-    ${CUDA_INCLUDE_DIRS}
+    ${OpenCV_INCLUDE_DIRS})
+    # Note: ${CUDAToolkit_INCLUDE_DIRS} not needed - CUDA::cudart provides includes automatically
+
+# Link libraries with proper visibility
+target_link_libraries(fcos_trt_backend
+  PRIVATE
+    # Hide implementation details - consumers don't need direct access
+    CUDA::cudart  # Provides CUDA includes automatically (modern CMake)
+    ${TENSORRT_LIBRARY}
+    ${OpenCV_LIBS})
+
+# Target-specific compile options (instead of global add_compile_options)
+target_compile_options(fcos_trt_backend PRIVATE
+  $<$<COMPILE_LANGUAGE:CUDA>:
+    --extended-lambda
+    -O3
+    --use_fast_math
+    -Xcompiler=-Wall,-Wextra,-Wpedantic
+  >
+  $<$<COMPILE_LANGUAGE:CXX>:
+    -Wall
+    -Wextra
+    -Wpedantic
+    -O3
+  >
 )
 
-# Link libraries
-target_link_libraries(fcos_inference
-    ${OpenCV_LIBS}
-    ${TENSORRT_LIBRARY_INFER}
-    ${TENSORRT_LIBRARY_INFER_PLUGIN}
-    ${TENSORRT_LIBRARY_PARSER}
-    ${CUDA_LIBRARIES}
-    cudart
-)
+# Require C++17 for consumers (modern CMake approach)
+target_compile_features(fcos_trt_backend PUBLIC cxx_std_17)
 
-# Compiler-specific options
-target_compile_definitions(fcos_inference PRIVATE API_EXPORTS)
-set_target_properties(fcos_inference PROPERTIES
-    CXX_STANDARD 14
-    CXX_STANDARD_REQUIRED ON
-)
+# Install the library
+install(TARGETS fcos_trt_backend
+  EXPORT export_${PROJECT_NAME}
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION bin
+  INCLUDES DESTINATION include)
 
-# Print build information
-message(STATUS "OpenCV version: ${OpenCV_VERSION}")
-message(STATUS "CUDA version: ${CUDA_VERSION}")
-message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+# Install header files
+install(DIRECTORY include/
+  DESTINATION include
+  FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp")
 
-# Installation (optional)
-install(TARGETS fcos_inference DESTINATION bin)
+# Export targets and dependencies
+ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
+# No dependencies to export since OpenCV, CUDA, and TensorRT are all private
+# Reminder: ament_export_dependencies(OpenCV CUDAToolkit) - not needed for private deps
 
-# Print usage instructions
-message(STATUS "")
-message(STATUS "Build instructions:")
-message(STATUS "  mkdir build && cd build")
-message(STATUS "  cmake ..")
-message(STATUS "  make -j$(nproc)")
-message(STATUS "")
-message(STATUS "Usage:")
-message(STATUS "  ./fcos_inference <engine_path> <image_path>")
-message(STATUS "  Example: ./fcos_inference ../engines/fcos_resnet50_fpn_374x1238.engine ../script/image_000.png")
-message(STATUS "")
+# Export include directories for downstream packages
+ament_export_include_directories(include)
+
+if(BUILD_TESTING)
+  find_package(ament_lint_auto REQUIRED)
+  # the following line skips the linter which checks for copyrights
+  # comment the line when a copyright and license is added to all source files
+  set(ament_cmake_copyright_FOUND TRUE)
+  # the following line skips cpplint (only works in a git repo)
+  # comment the line when this package is in a git repo and when
+  # a copyright and license is added to all source files
+  set(ament_cmake_cpplint_FOUND TRUE)
+  ament_lint_auto_find_test_dependencies()
+
+# find_package(ament_cmake_gtest REQUIRED)
+
+# # Include engine symbolic link setup
+# include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/TestingSetup.cmake)
+
+# ament_add_gtest(test_fcos_trt_backend
+#   test/test_fcos_trt_backend.cpp)
+
+# # Add OpenCV includes for the test
+# target_include_directories(test_fcos_trt_backend PRIVATE
+#   ${OpenCV_INCLUDE_DIRS})
+
+# # Use plain signature to match ament_add_gtest's internal calls
+# # Note: gtest_main is automatically linked by ament_add_gtest
+# target_link_libraries(test_fcos_trt_backend
+#   fcos_trt_backend
+#   ${OpenCV_LIBS})
+
+# # Make the test depend on the symbolic link
+# add_testing_dependency(test_fcos_trt_backend)
+endif()
+
+ament_package()

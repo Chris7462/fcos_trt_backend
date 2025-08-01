@@ -33,7 +33,7 @@ void Logger::log(Severity severity, const char * msg) noexcept
 
 // FCOSTrtBackend implementation
 FCOSTrtBackend::FCOSTrtBackend(const std::string & engine_path, const Config & config)
-: config_(config), stream_(nullptr)
+: config_(config)
 {
   try {
     initialize_engine(engine_path);
@@ -159,23 +159,31 @@ void FCOSTrtBackend::initialize_memory()
   }
   bbox_ctrness_size_ *= sizeof(float);
 
+  // Allocate pinned host memory
+  CUDA_CHECK(cudaMallocHost(&buffers_.pinned_input, input_size_));
+
   // Allocate GPU memory
   CUDA_CHECK(cudaMalloc(&buffers_.device_input, input_size_));
   CUDA_CHECK(cudaMalloc(&buffers_.device_cls_logits, cls_logits_size_));
   CUDA_CHECK(cudaMalloc(&buffers_.device_bbox_regression, bbox_regression_size_));
   CUDA_CHECK(cudaMalloc(&buffers_.device_bbox_ctrness, bbox_ctrness_size_));
+  CUDA_CHECK(cudaMalloc(&buffers_.device_temp_buffer, input_size_));
 
   // Set tensor addresses for the new TensorRT API
-  if (!context_->setTensorAddress(input_name_.c_str(), buffers_.device_input)) {
+  if (!context_->setTensorAddress(input_name_.c_str(),
+    static_cast<void *>(buffers_.device_input))) {
     throw TensorRTException("Failed to set input tensor address");
   }
-  if (!context_->setTensorAddress(cls_logits_name_.c_str(), buffers_.device_cls_logits)) {
+  if (!context_->setTensorAddress(cls_logits_name_.c_str(),
+    static_cast<void *>(buffers_.device_cls_logits))) {
     throw TensorRTException("Failed to set cls_logits tensor address");
   }
-  if (!context_->setTensorAddress(bbox_regression_name_.c_str(), buffers_.device_bbox_regression)) {
+  if (!context_->setTensorAddress(bbox_regression_name_.c_str(),
+    static_cast<void *>(buffers_.device_bbox_regression))) {
     throw TensorRTException("Failed to set bbox_regression tensor address");
   }
-  if (!context_->setTensorAddress(bbox_ctrness_name_.c_str(), buffers_.device_bbox_ctrness)) {
+  if (!context_->setTensorAddress(bbox_ctrness_name_.c_str(),
+    static_cast<void *>(buffers_.device_bbox_ctrness))) {
     throw TensorRTException("Failed to set bbox_ctrness tensor address");
   }
 }
@@ -190,18 +198,30 @@ void FCOSTrtBackend::initialize_streams()
 
 void FCOSTrtBackend::cleanup() noexcept
 {
+  // Free pinned host memory
+  if (buffers_.pinned_input) {
+    cudaFreeHost(buffers_.pinned_input);
+  }
+
   // Free device memory
   if (buffers_.device_input) {
     cudaFree(buffers_.device_input);
   }
+
   if (buffers_.device_cls_logits) {
     cudaFree(buffers_.device_cls_logits);
   }
+
   if (buffers_.device_bbox_regression) {
     cudaFree(buffers_.device_bbox_regression);
   }
+
   if (buffers_.device_bbox_ctrness) {
     cudaFree(buffers_.device_bbox_ctrness);
+  }
+
+  if (buffers_.device_temp_buffer) {
+    cudaFree(buffers_.device_temp_buffer);
   }
 
   // Reset all pointers to nullptr
@@ -236,10 +256,10 @@ FCOSTrtBackend::DetectionResults FCOSTrtBackend::infer(const cv::Mat & image)
   cv::Mat processed_image = preprocess_image(image);
 
   // Convert to CHW format and copy to GPU
-  std::vector<float> input_data(config_.channels * config_.height * config_.width);
+  std::vector<float> input_data(3 * config_.height * config_.width);
 
   // OpenCV image is HWC, we need CHW
-  for (int c = 0; c < config_.channels; c++) {
+  for (int c = 0; c < 3; c++) {
     for (int h = 0; h < config_.height; h++) {
       for (int w = 0; w < config_.width; w++) {
         int chw_idx = c * config_.height * config_.width + h * config_.width + w;
