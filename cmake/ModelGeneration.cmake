@@ -4,7 +4,7 @@
 # Include shared model configuration
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Config.cmake)
 
-# Create directories for models and engines
+# Create directories for onnxs and engines
 file(MAKE_DIRECTORY ${ONNXS_DIR})
 file(MAKE_DIRECTORY ${ENGINES_DIR})
 
@@ -53,11 +53,11 @@ function(add_model_generation_dependency target_name)
   add_dependencies(${target_name} generate_engine)
 endfunction()
 
-# Install generated models and engines
+# Install generated onnxs and engines
 # Check if directories exist before installing
 if(EXISTS ${ONNXS_DIR})
   install(DIRECTORY ${ONNXS_DIR}/
-    DESTINATION share/${PROJECT_NAME}/models
+    DESTINATION share/${PROJECT_NAME}/onnxs
     FILES_MATCHING PATTERN "*.onnx")
 endif()
 

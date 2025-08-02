@@ -1,10 +1,8 @@
 import argparse
-import cv2
 import os
 import torch
 from torchvision.models.detection import fcos_resnet50_fpn
 from torchvision.models.detection import FCOS_ResNet50_FPN_Weights
-from torchvision.transforms.functional import to_tensor
 from collections import OrderedDict
 
 
@@ -22,7 +20,10 @@ class FCOSBackbone(torch.nn.Module):
 
     def forward(self, images):
         # Apply transforms (normalization, resizing)
+        print(f'original_image_sizes: {images[0].shape}')
         images, _ = self.transform(images, None)
+        print(f"images: {images.image_sizes}")
+        print(f"image type: {type(images)}")
 
         # Extract features using backbone
         features = self.backbone(images.tensors)
@@ -34,14 +35,23 @@ class FCOSBackbone(torch.nn.Module):
         # Convert to list as expected by head and anchor_generator
         features_list = list(features.values())
 
+        # Generate anchors - pass both images and features
+        anchors = self.anchor_generator(images, features_list)
+
         # Get predictions from head
         head_outputs = self.head(features_list)
+
+        # Calculate num_anchors_per_level for consistency with original forward
+        num_anchors_per_level = [x.size(2) * x.size(3) for x in features_list]
 
         # Return raw outputs without NMS post-processing
         return {
             'cls_logits': head_outputs['cls_logits'],
             'bbox_regression': head_outputs['bbox_regression'],
-            'bbox_ctrness': head_outputs['bbox_ctrness']
+            'bbox_ctrness': head_outputs['bbox_ctrness'],
+            'anchors': anchors[0],
+            'image_sizes': torch.tensor(images.image_sizes[0]),
+            'num_anchors_per_level': torch.tensor(num_anchors_per_level)
         }
 
 ap = argparse.ArgumentParser()
@@ -52,7 +62,7 @@ ap.add_argument('--width', type=int, default=1238,
 ap.add_argument('-o', '--output-dir', type=str, default='onnxs',
                 help='Path to save the exported model')
 args = vars(ap.parse_args())
-#args = {'output_dir': './fcos_trt_backend/models', 'height': 374, 'width': 1238}
+#args = {'output_dir': './fcos_trt_backend/onnxs', 'height': 374, 'width': 1238}
 
 # Create output directory if it doesn't exist
 os.makedirs(args['output_dir'], exist_ok=True)
@@ -83,7 +93,10 @@ torch.onnx.export(
     output_names=[
         'cls_logits',
         'bbox_regression',
-        'bbox_ctrness'
+        'bbox_ctrness',
+        'anchors',
+        'image_sizes',
+        'num_anchors_per_level'
     ],
     # Note: Dynamic axes might be tricky with list inputs and anchor generation
     # Consider using fixed batch size for more reliable ONNX export
@@ -100,3 +113,25 @@ import onnx
 onnx_model = onnx.load(output_path)
 onnx.checker.check_model(onnx_model)
 print("✓ ONNX model validation passed")
+
+#   # For verify only. Comment out
+#   from PIL import Image
+#   import torchvision.transforms as transforms
+
+#   test_image_path = "fcos_trt_backend/test/image_000.png"
+#   # Load and preprocess the image
+#   pil_image = Image.open(test_image_path).convert('RGB')
+#   transform = transforms.ToTensor()
+#   test_image_tensor = transform(pil_image)
+#   test_image_tensor = test_image_tensor.unsqueeze(0)
+#   #test_image = [test_image_tensor]
+
+#   # Run inference
+#   #output = model(test_image)
+#   output = model(test_image_tensor)
+#   cls_logits = output['cls_logits']
+#   bbox_regression = output['bbox_regression']
+#   bbox_ctrness = output['bbox_ctrness']
+#   anchors = output['anchors']
+#   image_sizes = output['image_sizes']
+#   num_anchors_per_level = output['num_anchors_per_level']
