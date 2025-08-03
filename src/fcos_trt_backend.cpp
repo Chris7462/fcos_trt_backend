@@ -364,17 +364,17 @@ FCOSTrtBackend::DetectionResults FCOSTrtBackend::infer(const cv::Mat & image)
 
   // Copy results from GPU to CPU
   CUDA_CHECK(cudaMemcpy(results.cls_logits.data(), buffers_.device_cls_logits,
-                       cls_logits_size_, cudaMemcpyDeviceToHost));
+                        cls_logits_size_, cudaMemcpyDeviceToHost));
   CUDA_CHECK(cudaMemcpy(results.bbox_regression.data(), buffers_.device_bbox_regression,
-                       bbox_regression_size_, cudaMemcpyDeviceToHost));
+                        bbox_regression_size_, cudaMemcpyDeviceToHost));
   CUDA_CHECK(cudaMemcpy(results.bbox_ctrness.data(), buffers_.device_bbox_ctrness,
-                       bbox_ctrness_size_, cudaMemcpyDeviceToHost));
+                        bbox_ctrness_size_, cudaMemcpyDeviceToHost));
   CUDA_CHECK(cudaMemcpy(results.anchors.data(), buffers_.device_anchors,
-                       anchors_size_, cudaMemcpyDeviceToHost));
+                        anchors_size_, cudaMemcpyDeviceToHost));
   CUDA_CHECK(cudaMemcpy(results.image_sizes.data(), buffers_.device_image_sizes,
-                       image_sizes_size_, cudaMemcpyDeviceToHost));
+                        image_sizes_size_, cudaMemcpyDeviceToHost));
   CUDA_CHECK(cudaMemcpy(results.num_anchors_per_level.data(), buffers_.device_num_anchors_per_level,
-                       num_anchors_per_level_size_, cudaMemcpyDeviceToHost));
+                        num_anchors_per_level_size_, cudaMemcpyDeviceToHost));
 
   return results;
 }

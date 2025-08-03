@@ -8,7 +8,7 @@ This will generate the onnx file in the `onnxs` directory.
 python3 script/export_fcos_to_onnx.py \
         --height 374 \
         --width 1238 \
-        --output onnxs
+        --output-dir onnxs
 ```
 
 ## Compile to TensorRT engine
