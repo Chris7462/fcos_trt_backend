@@ -1,0 +1,137 @@
+import argparse
+import os
+import torch
+from torchvision.models.detection import fcos_resnet50_fpn
+from torchvision.models.detection import FCOS_ResNet50_FPN_Weights
+from collections import OrderedDict
+
+
+class FCOSBackbone(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        # Load pretrained FCOS model
+        print("Loading pretrained FCOS model...")
+        self.model = fcos_resnet50_fpn(weights=FCOS_ResNet50_FPN_Weights.DEFAULT)
+        self.model.eval()
+        self.backbone = self.model.backbone
+        self.anchor_generator = self.model.anchor_generator
+        self.head = self.model.head
+        self.transform = self.model.transform
+
+    def forward(self, images):
+        # Apply transforms (normalization, resizing)
+        print(f'original_image_sizes: {images[0].shape}')
+        images, _ = self.transform(images, None)
+        print(f"images: {images.image_sizes}")
+        print(f"image type: {type(images)}")
+
+        # Extract features using backbone
+        features = self.backbone(images.tensors)
+
+        # Handle case where backbone returns a single tensor (convert to OrderedDict)
+        if isinstance(features, torch.Tensor):
+            features = OrderedDict([("0", features)])
+
+        # Convert to list as expected by head and anchor_generator
+        features_list = list(features.values())
+
+        # Generate anchors - pass both images and features
+        anchors = self.anchor_generator(images, features_list)
+
+        # Get predictions from head
+        head_outputs = self.head(features_list)
+
+        # Calculate num_anchors_per_level for consistency with original forward
+        num_anchors_per_level = [x.size(2) * x.size(3) for x in features_list]
+
+        # Return raw outputs without NMS post-processing
+        return {
+            'cls_logits': head_outputs['cls_logits'],
+            'bbox_regression': head_outputs['bbox_regression'],
+            'bbox_ctrness': head_outputs['bbox_ctrness'],
+            'anchors': anchors[0],
+            'image_sizes': torch.tensor(images.image_sizes[0]),
+            'num_anchors_per_level': torch.tensor(num_anchors_per_level)
+        }
+
+ap = argparse.ArgumentParser()
+ap.add_argument('--height', type=int, default=374,
+                help='Input image height')
+ap.add_argument('--width', type=int, default=1238,
+                help='Input image width')
+ap.add_argument('-o', '--output-dir', type=str, default='onnxs',
+                help='Path to save the exported model')
+args = vars(ap.parse_args())
+#args = {'output_dir': './fcos_trt_backend/onnxs', 'height': 374, 'width': 1238}
+
+# Create output directory if it doesn't exist
+os.makedirs(args['output_dir'], exist_ok=True)
+
+# Load pretrained FCOS model
+print("Creating pretrained FCOS backbone model...")
+# Create backbone-only version
+model = FCOSBackbone()
+model.eval()
+
+# Create dummy input - note: input should be a list of tensors for proper transform handling
+height, width = args['height'], args['width']
+dummy_input = [torch.randn(3, height, width)]  # List of tensors, not batched tensor
+
+print(f"Exporting model with input size: {height}x{width}")
+
+# Export to ONNX (backbone + heads only, no NMS)
+output_path = os.path.join(args['output_dir'], f'fcos_resnet50_fpn_{height}x{width}.onnx')
+
+torch.onnx.export(
+    model,
+    dummy_input,
+    output_path,
+    export_params=True,
+    opset_version=11,
+    do_constant_folding=True,
+    input_names=['input'],
+    output_names=[
+        'cls_logits',
+        'bbox_regression',
+        'bbox_ctrness',
+        'anchors',
+        'image_sizes',
+        'num_anchors_per_level'
+    ],
+    # Note: Dynamic axes might be tricky with list inputs and anchor generation
+    # Consider using fixed batch size for more reliable ONNX export
+    verbose=True
+)
+
+print(f"✓ Backbone model successfully exported to ONNX format as '{output_path}'")
+print("✓ Model outputs raw predictions without NMS post-processing")
+print("⚠ Note: You'll need to implement NMS separately in your inference pipeline")
+
+# Test the exported model
+print("\nTesting ONNX model...")
+import onnx
+onnx_model = onnx.load(output_path)
+onnx.checker.check_model(onnx_model)
+print("✓ ONNX model validation passed")
+
+#   # For verify only. Comment out
+#   from PIL import Image
+#   import torchvision.transforms as transforms
+
+#   test_image_path = "fcos_trt_backend/test/image_000.png"
+#   # Load and preprocess the image
+#   pil_image = Image.open(test_image_path).convert('RGB')
+#   transform = transforms.ToTensor()
+#   test_image_tensor = transform(pil_image)
+#   test_image_tensor = test_image_tensor.unsqueeze(0)
+#   #test_image = [test_image_tensor]
+
+#   # Run inference
+#   #output = model(test_image)
+#   output = model(test_image_tensor)
+#   cls_logits = output['cls_logits']
+#   bbox_regression = output['bbox_regression']
+#   bbox_ctrness = output['bbox_ctrness']
+#   anchors = output['anchors']
+#   image_sizes = output['image_sizes']
+#   num_anchors_per_level = output['num_anchors_per_level']
