@@ -323,21 +323,11 @@ def compare_models():
             num_anchors_per_level=raw_outputs['num_anchors_per_level']
         )
 
-        # Since original_image_sizes is no longer available, we need to get it differently
-        # We'll use the transform to get the original image sizes
-        original_image_sizes = []
-        for img in test_images:
-            val = img.shape[-2:]
-            original_image_sizes.append((val[0], val[1]))
-
         # Apply transform postprocess to get final coordinates
-        # Create image_sizes list from tensor
-        image_sizes_list = [tuple(raw_outputs['image_sizes'].tolist())]
-        
         custom_results = original_model.transform.postprocess(
             custom_results,
-            image_sizes_list,
-            original_image_sizes
+            raw_outputs['image_sizes'],
+            raw_outputs['original_image_sizes']
         )
 
     print(f"   Custom model - Number of detections: {[len(r['boxes']) for r in custom_results]}")
@@ -468,7 +458,7 @@ def detailed_intermediate_comparison():
         # Compare anchor generation
         original_anchors = original_model.anchor_generator(original_images, original_features_list)
         print(f"   Original anchors type: {type(original_anchors[0])}")
-        print(f"   Custom anchors type: {type(custom_outputs['anchors'])}")
+        print(f"   Custom anchors type: {type(custom_outputs['anchors'][0])}")
 
         # Handle different anchor formats
         if isinstance(original_anchors[0], list):
@@ -478,9 +468,12 @@ def detailed_intermediate_comparison():
             print(f"   Anchors shape - Original: {original_anchors[0].shape}")
             original_anchors_concat = original_anchors[0]
 
-        # Custom anchors are now a single tensor
-        print(f"   Anchors shape - Custom: {custom_outputs['anchors'].shape}")
-        custom_anchors_concat = custom_outputs['anchors']
+        if isinstance(custom_outputs['anchors'][0], list):
+            print(f"   Anchors shapes - Custom: {[a.shape for a in custom_outputs['anchors'][0]]}")
+            custom_anchors_concat = torch.cat(custom_outputs['anchors'][0])
+        else:
+            print(f"   Anchors shape - Custom: {custom_outputs['anchors'][0].shape}")
+            custom_anchors_concat = custom_outputs['anchors'][0]
 
         anchor_diff = torch.abs(original_anchors_concat - custom_anchors_concat).max()
         print(f"   Max anchor difference: {anchor_diff:.8f}")
