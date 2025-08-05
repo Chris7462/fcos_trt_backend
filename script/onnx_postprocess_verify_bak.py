@@ -30,6 +30,9 @@ class FCOSBackbone(Module):
         self.transform = self.model.transform
 
     def forward(self, images):
+        # Store original image sizes before transformation
+        original_image_sizes = [img.shape[-2:] for img in images]
+
         # Apply transforms (normalization, resizing)
         images, _ = self.transform(images, None)
 
@@ -59,6 +62,7 @@ class FCOSBackbone(Module):
             'bbox_ctrness': head_outputs['bbox_ctrness'],
             'anchors': anchors[0],
             'image_sizes': torch.tensor(images.image_sizes[0]),
+            'original_image_sizes': torch.tensor(original_image_sizes[0]),
             'num_anchors_per_level': torch.tensor(num_anchors_per_level)
         }
 
@@ -165,21 +169,26 @@ class FCOSPostProcessor:
 
         return detections
 
-# COCO class labels (from your plotting script)
-COCO_INSTANCE_CATEGORY_NAMES = [
-    '__background__', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
-    'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign',
-    'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
-    'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag',
-    'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite',
-    'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket',
-    'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana',
-    'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza',
-    'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table',
-    'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone',
-    'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock',
-    'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush'
-]
+# COCO class labels with correct category IDs (matching actual COCO dataset)
+COCO_INSTANCE_CATEGORY_NAMES = {
+    0: '__background__', 1: 'person', 2: 'bicycle', 3: 'car', 4: 'motorcycle',
+    5: 'airplane', 6: 'bus', 7: 'train', 8: 'truck', 9: 'boat',
+    10: 'traffic light', 11: 'fire hydrant', 13: 'stop sign', 14: 'parking meter',
+    15: 'bench', 16: 'bird', 17: 'cat', 18: 'dog', 19: 'horse', 20: 'sheep',
+    21: 'cow', 22: 'elephant', 23: 'bear', 24: 'zebra', 25: 'giraffe',
+    26: 'backpack', 27: 'umbrella', 28: 'handbag', 29: 'tie', 30: 'suitcase',
+    31: 'frisbee', 32: 'skis', 33: 'snowboard', 34: 'sports ball', 35: 'kite',
+    36: 'baseball bat', 37: 'baseball glove', 38: 'skateboard', 39: 'surfboard',
+    40: 'tennis racket', 41: 'bottle', 42: 'wine glass', 43: 'cup', 44: 'fork',
+    45: 'knife', 46: 'spoon', 47: 'bowl', 48: 'banana', 49: 'apple',
+    50: 'sandwich', 51: 'orange', 52: 'broccoli', 53: 'carrot', 54: 'hot dog',
+    55: 'pizza', 56: 'donut', 57: 'cake', 58: 'chair', 59: 'couch',
+    60: 'potted plant', 61: 'bed', 62: 'dining table', 63: 'toilet', 64: 'tv',
+    65: 'laptop', 66: 'mouse', 67: 'remote', 68: 'keyboard', 69: 'cell phone',
+    70: 'microwave', 71: 'oven', 72: 'toaster', 73: 'sink', 74: 'refrigerator',
+    75: 'book', 76: 'clock', 77: 'vase', 78: 'scissors', 79: 'teddy bear',
+    80: 'hair drier', 81: 'toothbrush'
+}
 
 
 def plot_detections(image_path, detections, title, confidence_threshold=0.6):
@@ -207,7 +216,7 @@ def plot_detections(image_path, detections, title, confidence_threshold=0.6):
                 cv2.rectangle(image_for_plot, (x1, y1), (x2, y2), (0, 0, 255), 2)
 
                 # Draw label and score
-                class_name = COCO_INSTANCE_CATEGORY_NAMES[label]
+                class_name = COCO_INSTANCE_CATEGORY_NAMES.get(label.item(), f'class_{label.item()}')
                 label_text = f'{class_name}: {score:.2f}'
                 cv2.putText(image_for_plot, label_text, (x1, y1 - 10),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
@@ -220,7 +229,7 @@ def plot_detections(image_path, detections, title, confidence_threshold=0.6):
         return None
 
 
-def visualize_comparison(image_path, original_results, custom_results, confidence_threshold=0.6):
+def visualize_comparison(image_path, original_results, custom_results, confidence_threshold=0.5):
     """Create side-by-side comparison of detection results"""
 
     print(f"\n=== Visualization Comparison (confidence > {confidence_threshold}) ===")
@@ -267,7 +276,7 @@ def compare_models():
     np.random.seed(42)
 
     # Load real test image
-    test_image_path = "test/image_000.png"
+    test_image_path = "fcos_trt_backend/test/image_000.png"
 
     try:
         from PIL import Image
@@ -285,7 +294,7 @@ def compare_models():
     except Exception as e:
         print(f"Error loading image {test_image_path}: {e}")
         print("Falling back to random test image...")
-        test_images = [torch.rand(3, 400, 600)]
+        raise
 
     print("=== Model Comparison Test ===")
 
@@ -326,8 +335,8 @@ def compare_models():
         # Apply transform postprocess to get final coordinates
         custom_results = original_model.transform.postprocess(
             custom_results,
-            raw_outputs['image_sizes'],
-            raw_outputs['original_image_sizes']
+            [raw_outputs['image_sizes']],
+            [raw_outputs['original_image_sizes']]
         )
 
     print(f"   Custom model - Number of detections: {[len(r['boxes']) for r in custom_results]}")
@@ -410,7 +419,7 @@ def detailed_intermediate_comparison():
     torch.manual_seed(42)
 
     # Load the same test image
-    test_image_path = "test/image_000.png"
+    test_image_path = "fcos_trt_backend/test/image_000.png"
 
     try:
         from PIL import Image
@@ -482,7 +491,7 @@ def detailed_intermediate_comparison():
         original_head_outputs = original_model.head(original_features_list)
 
         cls_diff = torch.abs(original_head_outputs['cls_logits'] - custom_outputs['cls_logits']).max()
-        bbox_diff = torch.abs(original_head_outputs['bbox_regression'] - custom_outputs['bbox_regression']).max()  
+        bbox_diff = torch.abs(original_head_outputs['bbox_regression'] - custom_outputs['bbox_regression']).max()
         ctr_diff = torch.abs(original_head_outputs['bbox_ctrness'] - custom_outputs['bbox_ctrness']).max()
 
         print(f"   Max cls_logits difference: {cls_diff:.8f}")
@@ -502,10 +511,10 @@ if __name__ == "__main__":
     # Run detailed intermediate comparison
     detailed_intermediate_comparison()
 
-    test_image_path = "test/image_000.png"
+    test_image_path = "fcos_trt_backend/test/image_000.png"
 
     # Create visual comparison
-    visualize_comparison(test_image_path, original_results, custom_results, confidence_threshold=0.6)
+    visualize_comparison(test_image_path, original_results, custom_results, confidence_threshold=0.5)
 
     print("\n=== Test Complete ===")
     print("If the models produce nearly identical results, your FCOSBackbone")
