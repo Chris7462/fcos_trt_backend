@@ -55,15 +55,11 @@ def print_tensor_stats(tensor, name):
     print(f"  Std: {flat_tensor.std():.8f}")
     print(f"  First 10 values: {flat_tensor[:10].tolist()}")
 
-def detailed_intermediate_results():
+def detailed_intermediate_results(test_image_path):
     """Show intermediate outputs to identify where differences might occur"""
-
     print("\n=== Detailed Intermediate Results ===")
 
     torch.manual_seed(42)
-
-    # Load the same test image
-    test_image_path = "test/image_000.png"
 
     try:
         from PIL import Image
@@ -151,11 +147,8 @@ def detailed_intermediate_results():
 
 
 if __name__ == "__main__":
+    # Load the same test image
+    test_image_path = "fcos_trt_backend/test/image_000.png"
+
     # Run detailed intermediate comparison
-    detailed_intermediate_results()
-
-    test_image_path = "script/image_000.png"
-
-    print("\n=== Test Complete ===")
-    print("If the models produce nearly identical results, your FCOSBackbone")
-    print("implementation is correct and ready for ONNX export!")
+    detailed_intermediate_results(test_image_path)
