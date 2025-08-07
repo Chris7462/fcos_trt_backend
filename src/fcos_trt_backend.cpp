@@ -102,6 +102,9 @@ void FCOSTrtBackend::find_tensor_names()
   bool found_cls_logits = false;
   bool found_bbox_regression = false;
   bool found_bbox_ctrness = false;
+  bool found_anchors = false;
+  bool found_image_sizes = false;
+  bool found_num_anchors_per_level = false;
 
   for (int i = 0; i < engine_->getNbIOTensors(); ++i) {
     const char * tensor_name = engine_->getIOTensorName(i);
@@ -121,11 +124,22 @@ void FCOSTrtBackend::find_tensor_names()
       } else if (name_str == "bbox_ctrness") {
         bbox_ctrness_name_ = tensor_name;
         found_bbox_ctrness = true;
+      } else if (name_str == "anchors") {
+        anchors_name_ = tensor_name;
+        found_anchors = true;
+      } else if (name_str == "image_sizes") {
+        image_sizes_name_ = tensor_name;
+        found_image_sizes = true;
+      } else if (name_str == "num_anchors_per_level") {
+        num_anchors_per_level_name_ = tensor_name;
+        found_num_anchors_per_level = true;
       }
     }
   }
 
-  if (!found_input || !found_cls_logits || !found_bbox_regression || !found_bbox_ctrness) {
+  if (!found_input || !found_cls_logits || !found_bbox_regression ||
+      !found_bbox_ctrness || !found_anchors || !found_image_sizes ||
+      !found_num_anchors_per_level) {
     throw TensorRTException("Failed to find required input/output tensors");
   }
 }
@@ -140,6 +154,9 @@ void FCOSTrtBackend::initialize_memory()
   auto cls_shape = engine_->getTensorShape(cls_logits_name_.c_str());
   auto bbox_shape = engine_->getTensorShape(bbox_regression_name_.c_str());
   auto ctr_shape = engine_->getTensorShape(bbox_ctrness_name_.c_str());
+  auto anchors_shape = engine_->getTensorShape(anchors_name_.c_str());
+  auto image_sizes_shape = engine_->getTensorShape(image_sizes_name_.c_str());
+  auto num_anchors_shape = engine_->getTensorShape(num_anchors_per_level_name_.c_str());
 
   cls_logits_size_ = 1;
   for (int i = 0; i < cls_shape.nbDims; ++i) {
@@ -159,6 +176,24 @@ void FCOSTrtBackend::initialize_memory()
   }
   bbox_ctrness_size_ *= sizeof(float);
 
+  anchors_size_ = 1;
+  for (int i = 0; i < anchors_shape.nbDims; ++i) {
+    anchors_size_ *= anchors_shape.d[i];
+  }
+  anchors_size_ *= sizeof(float);
+
+  image_sizes_size_ = 1;
+  for (int i = 0; i < image_sizes_shape.nbDims; ++i) {
+    image_sizes_size_ *= image_sizes_shape.d[i];
+  }
+  image_sizes_size_ *= sizeof(int64_t);
+
+  num_anchors_per_level_size_ = 1;
+  for (int i = 0; i < num_anchors_shape.nbDims; ++i) {
+    num_anchors_per_level_size_ *= num_anchors_shape.d[i];
+  }
+  num_anchors_per_level_size_ *= sizeof(int64_t);
+
   // Allocate pinned host memory
   CUDA_CHECK(cudaMallocHost(&buffers_.pinned_input, input_size_));
 
@@ -167,6 +202,9 @@ void FCOSTrtBackend::initialize_memory()
   CUDA_CHECK(cudaMalloc(&buffers_.device_cls_logits, cls_logits_size_));
   CUDA_CHECK(cudaMalloc(&buffers_.device_bbox_regression, bbox_regression_size_));
   CUDA_CHECK(cudaMalloc(&buffers_.device_bbox_ctrness, bbox_ctrness_size_));
+  CUDA_CHECK(cudaMalloc(&buffers_.device_anchors, anchors_size_));
+  CUDA_CHECK(cudaMalloc(&buffers_.device_image_sizes, image_sizes_size_));
+  CUDA_CHECK(cudaMalloc(&buffers_.device_num_anchors_per_level, num_anchors_per_level_size_));
   CUDA_CHECK(cudaMalloc(&buffers_.device_temp_buffer, input_size_));
 
   // Set tensor addresses for the new TensorRT API
@@ -185,6 +223,18 @@ void FCOSTrtBackend::initialize_memory()
   if (!context_->setTensorAddress(bbox_ctrness_name_.c_str(),
     static_cast<void *>(buffers_.device_bbox_ctrness))) {
     throw TensorRTException("Failed to set bbox_ctrness tensor address");
+  }
+  if (!context_->setTensorAddress(anchors_name_.c_str(),
+    static_cast<void *>(buffers_.device_anchors))) {
+    throw TensorRTException("Failed to set anchors tensor address");
+  }
+  if (!context_->setTensorAddress(image_sizes_name_.c_str(),
+    static_cast<void *>(buffers_.device_image_sizes))) {
+    throw TensorRTException("Failed to set image_sizes tensor address");
+  }
+  if (!context_->setTensorAddress(num_anchors_per_level_name_.c_str(),
+    static_cast<void *>(buffers_.device_num_anchors_per_level))) {
+    throw TensorRTException("Failed to set num_anchors_per_level tensor address");
   }
 }
 
@@ -218,6 +268,18 @@ void FCOSTrtBackend::cleanup() noexcept
 
   if (buffers_.device_bbox_ctrness) {
     cudaFree(buffers_.device_bbox_ctrness);
+  }
+
+  if (buffers_.device_anchors) {
+    cudaFree(buffers_.device_anchors);
+  }
+
+  if (buffers_.device_image_sizes) {
+    cudaFree(buffers_.device_image_sizes);
+  }
+
+  if (buffers_.device_num_anchors_per_level) {
+    cudaFree(buffers_.device_num_anchors_per_level);
   }
 
   if (buffers_.device_temp_buffer) {
@@ -288,19 +350,31 @@ FCOSTrtBackend::DetectionResults FCOSTrtBackend::infer(const cv::Mat & image)
   size_t cls_size = cls_logits_size_ / sizeof(float);
   size_t bbox_size = bbox_regression_size_ / sizeof(float);
   size_t ctr_size = bbox_ctrness_size_ / sizeof(float);
+  size_t anchors_size = anchors_size_ / sizeof(float);
+  size_t image_sizes_size = image_sizes_size_ / sizeof(int64_t);
+  size_t num_anchors_size = num_anchors_per_level_size_ / sizeof(int64_t);
 
   // Resize result vectors
   results.cls_logits.resize(cls_size);
   results.bbox_regression.resize(bbox_size);
   results.bbox_ctrness.resize(ctr_size);
+  results.anchors.resize(anchors_size);
+  results.image_sizes.resize(image_sizes_size);
+  results.num_anchors_per_level.resize(num_anchors_size);
 
   // Copy results from GPU to CPU
   CUDA_CHECK(cudaMemcpy(results.cls_logits.data(), buffers_.device_cls_logits,
-                       cls_logits_size_, cudaMemcpyDeviceToHost));
+                        cls_logits_size_, cudaMemcpyDeviceToHost));
   CUDA_CHECK(cudaMemcpy(results.bbox_regression.data(), buffers_.device_bbox_regression,
-                       bbox_regression_size_, cudaMemcpyDeviceToHost));
+                        bbox_regression_size_, cudaMemcpyDeviceToHost));
   CUDA_CHECK(cudaMemcpy(results.bbox_ctrness.data(), buffers_.device_bbox_ctrness,
-                       bbox_ctrness_size_, cudaMemcpyDeviceToHost));
+                        bbox_ctrness_size_, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy(results.anchors.data(), buffers_.device_anchors,
+                        anchors_size_, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy(results.image_sizes.data(), buffers_.device_image_sizes,
+                        image_sizes_size_, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy(results.num_anchors_per_level.data(), buffers_.device_num_anchors_per_level,
+                        num_anchors_per_level_size_, cudaMemcpyDeviceToHost));
 
   return results;
 }
@@ -336,8 +410,30 @@ void FCOSTrtBackend::print_results(const DetectionResults & results)
     std::cout << "... (total size: " << results.bbox_ctrness.size() << ")" << std::endl;
   }
 
+  std::cout << "\nANCHORS (first 20 values):" << std::endl;
+  for (int i = 0; i < std::min(20, (int)results.anchors.size()); i++) {
+    std::cout << results.anchors[i] << " ";
+    if ((i + 1) % 10 == 0) std::cout << std::endl;
+  }
+  if (results.anchors.size() > 20) {
+    std::cout << "... (total size: " << results.anchors.size() << ")" << std::endl;
+  }
+
+  std::cout << "\nIMAGE_SIZES:" << std::endl;
+  for (int i = 0; i < (int)results.image_sizes.size(); i++) {
+    std::cout << results.image_sizes[i] << " ";
+  }
+  std::cout << std::endl;
+
+  std::cout << "\nNUM_ANCHORS_PER_LEVEL:" << std::endl;
+  for (int i = 0; i < (int)results.num_anchors_per_level.size(); i++) {
+    std::cout << results.num_anchors_per_level[i] << " ";
+  }
+  std::cout << std::endl;
+
   // Print statistics
-  auto calc_stats = [](const std::vector<float> & data, const std::string & name) {
+  auto calc_stats_float = [](const std::vector<float> & data, const std::string & name) {
+    if (data.empty()) return;
     float min_val = *std::min_element(data.begin(), data.end());
     float max_val = *std::max_element(data.begin(), data.end());
     float sum = std::accumulate(data.begin(), data.end(), 0.0f);
@@ -350,9 +446,26 @@ void FCOSTrtBackend::print_results(const DetectionResults & results)
     std::cout << "  Size: " << data.size() << std::endl;
   };
 
-  calc_stats(results.cls_logits, "CLS_LOGITS");
-  calc_stats(results.bbox_regression, "BBOX_REGRESSION");
-  calc_stats(results.bbox_ctrness, "BBOX_CTRNESS");
+  auto calc_stats_int64 = [](const std::vector<int64_t> & data, const std::string & name) {
+    if (data.empty()) return;
+    int64_t min_val = *std::min_element(data.begin(), data.end());
+    int64_t max_val = *std::max_element(data.begin(), data.end());
+    long long sum = std::accumulate(data.begin(), data.end(), 0LL);
+    double mean = (double)sum / data.size();
+
+    std::cout << "\n" << name << " Statistics:" << std::endl;
+    std::cout << "  Min: " << min_val << std::endl;
+    std::cout << "  Max: " << max_val << std::endl;
+    std::cout << "  Mean: " << mean << std::endl;
+    std::cout << "  Size: " << data.size() << std::endl;
+  };
+
+  calc_stats_float(results.cls_logits, "CLS_LOGITS");
+  calc_stats_float(results.bbox_regression, "BBOX_REGRESSION");
+  calc_stats_float(results.bbox_ctrness, "BBOX_CTRNESS");
+  calc_stats_float(results.anchors, "ANCHORS");
+  calc_stats_int64(results.image_sizes, "IMAGE_SIZES");
+  calc_stats_int64(results.num_anchors_per_level, "NUM_ANCHORS_PER_LEVEL");
 }
 
 } // namespace fcos_trt_backend

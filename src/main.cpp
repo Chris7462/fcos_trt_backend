@@ -11,7 +11,7 @@
 int main(int argc, char* argv[]) {
   if (argc != 3) {
     std::cerr << "Usage: " << argv[0] << " <engine_path> <image_path>" << std::endl;
-    std::cerr << "Example: ./fcos_inference engines/fcos_resnet50_fpn_374x1238.engine script/image_000.png" << std::endl;
+    std::cerr << "Example: ./fcos_inference engines/fcos_resnet50_fpn_374x1238.engine test/image_000.png" << std::endl;
     return -1;
   }
 

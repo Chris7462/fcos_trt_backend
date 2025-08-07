@@ -13,7 +13,7 @@ add_custom_command(
   COMMAND ${CMAKE_COMMAND} -E create_symlink
           ${ENGINE_PATH}
           ${ENGINE_LINK_PATH}
-  DEPENDS fcn_trt_backend  # Depend on the main library target so it won't build before the engine is generated
+  DEPENDS fcos_trt_backend  # Depend on the main library target so it won't build before the engine is generated
   COMMENT "Creating symbolic link to engine file for testing: ${ENGINE_FILE}..."
 )
 
@@ -33,7 +33,7 @@ foreach(image_file IN LISTS TEST_IMAGE_FILES)
   add_custom_command(
     OUTPUT ${dst}
     COMMAND ${CMAKE_COMMAND} -E create_symlink ${src} ${dst}
-    DEPENDS fcn_trt_backend
+    DEPENDS fcos_trt_backend
     COMMENT "Creating symbolic link to ${image_file} for testing..."
   )
 

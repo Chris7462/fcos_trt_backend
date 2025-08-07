@@ -38,14 +38,23 @@ class FCOSBackbone(torch.nn.Module):
         # Convert to list as expected by head and anchor_generator
         features_list = list(features.values())
 
+        # Generate anchors - pass both images and features
+        anchors = self.anchor_generator(images, features_list)
+
         # Get predictions from head
         head_outputs = self.head(features_list)
+
+        # Calculate num_anchors_per_level for consistency with original forward
+        num_anchors_per_level = [x.size(2) * x.size(3) for x in features_list]
 
         # Return raw outputs without NMS post-processing
         return {
             'cls_logits': head_outputs['cls_logits'],
             'bbox_regression': head_outputs['bbox_regression'],
-            'bbox_ctrness': head_outputs['bbox_ctrness']
+            'bbox_ctrness': head_outputs['bbox_ctrness'],
+            'anchors': anchors[0],
+            'image_sizes': torch.tensor(images.image_sizes[0]),
+            'num_anchors_per_level': torch.tensor(num_anchors_per_level)
         }
 
 
@@ -77,14 +86,25 @@ def print_tensor_stats(tensor, name, print_first_n=20):
 
     print(f"{name} (first {print_first_n} values):")
     first_values = flat_tensor[:print_first_n].detach().cpu().numpy()
-    values_str = ' '.join([f"{val:.5f}" for val in first_values])
+
+    # Handle integer vs float tensors for formatting
+    if tensor.dtype in [torch.int32, torch.int64, torch.long]:
+        values_str = ' '.join([f"{val}" for val in first_values])
+    else:
+        values_str = ' '.join([f"{val:.5f}" for val in first_values])
+
     print(values_str)
     print(f"... (total size: {flat_tensor.numel()})")
 
     print(f"{name} Statistics:")
-    print(f"  Min: {flat_tensor.min():.5f}")
-    print(f"  Max: {flat_tensor.max():.5f}")
-    print(f"  Mean: {flat_tensor.mean():.5f}")
+    if tensor.dtype in [torch.int32, torch.int64, torch.long]:
+        print(f"  Min: {flat_tensor.min()}")
+        print(f"  Max: {flat_tensor.max()}")
+        print(f"  Mean: {flat_tensor.float().mean():.5f}")
+    else:
+        print(f"  Min: {flat_tensor.min():.5f}")
+        print(f"  Max: {flat_tensor.max():.5f}")
+        print(f"  Mean: {flat_tensor.mean():.5f}")
     print(f"  Size: {flat_tensor.numel()}")
 
 
@@ -99,6 +119,9 @@ def run_pytorch_inference(model, image_tensor):
     print_tensor_stats(outputs['cls_logits'], "CLS_LOGITS")
     print_tensor_stats(outputs['bbox_regression'], "BBOX_REGRESSION")
     print_tensor_stats(outputs['bbox_ctrness'], "BBOX_CTRNESS")
+    print_tensor_stats(outputs['anchors'], "ANCHORS")
+    print_tensor_stats(outputs['image_sizes'], "IMAGE_SIZES")
+    print_tensor_stats(outputs['num_anchors_per_level'], "NUM_ANCHORS_PER_LEVEL")
     print("✓ PyTorch inference completed successfully!")
 
     return outputs
@@ -126,13 +149,19 @@ def run_onnx_inference(onnx_path, image_tensor):
     outputs = {
         'cls_logits': torch.from_numpy(ort_outputs[0]),
         'bbox_regression': torch.from_numpy(ort_outputs[1]),
-        'bbox_ctrness': torch.from_numpy(ort_outputs[2])
+        'bbox_ctrness': torch.from_numpy(ort_outputs[2]),
+        'anchors': torch.from_numpy(ort_outputs[3]),
+        'image_sizes': torch.from_numpy(ort_outputs[4]),
+        'num_anchors_per_level': torch.from_numpy(ort_outputs[5])
     }
 
     print("=== ONNX INFERENCE RESULTS ===")
     print_tensor_stats(outputs['cls_logits'], "CLS_LOGITS")
     print_tensor_stats(outputs['bbox_regression'], "BBOX_REGRESSION")
     print_tensor_stats(outputs['bbox_ctrness'], "BBOX_CTRNESS")
+    print_tensor_stats(outputs['anchors'], "ANCHORS")
+    print_tensor_stats(outputs['image_sizes'], "IMAGE_SIZES")
+    print_tensor_stats(outputs['num_anchors_per_level'], "NUM_ANCHORS_PER_LEVEL")
     print("✓ ONNX inference completed successfully!")
 
     return outputs

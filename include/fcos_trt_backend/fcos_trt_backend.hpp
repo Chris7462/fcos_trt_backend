@@ -66,6 +66,9 @@ public:
     std::vector<float> cls_logits;
     std::vector<float> bbox_regression;
     std::vector<float> bbox_ctrness;
+    std::vector<float> anchors;
+    std::vector<int64_t> image_sizes;
+    std::vector<int64_t> num_anchors_per_level;
   };
 
   // Constructor with configuration
@@ -120,10 +123,17 @@ private:
   std::string cls_logits_name_;
   std::string bbox_regression_name_;
   std::string bbox_ctrness_name_;
+  std::string anchors_name_;
+  std::string image_sizes_name_;
+  std::string num_anchors_per_level_name_;
+
   size_t input_size_;
   size_t cls_logits_size_;
   size_t bbox_regression_size_;
   size_t bbox_ctrness_size_;
+  size_t anchors_size_;
+  size_t image_sizes_size_;
+  size_t num_anchors_per_level_size_;
 
   // Memory buffers
   struct MemoryBuffers
@@ -133,12 +143,17 @@ private:
     float * device_cls_logits;
     float * device_bbox_regression;
     float * device_bbox_ctrness;
+    float * device_anchors;
+    int64_t * device_image_sizes;
+    int64_t * device_num_anchors_per_level;
     float * device_temp_buffer; // For img preprocessing
 
     MemoryBuffers()
     : pinned_input(nullptr), device_input(nullptr),
       device_cls_logits(nullptr), device_bbox_regression(nullptr),
-      device_bbox_ctrness(nullptr), device_temp_buffer(nullptr) {}
+      device_bbox_ctrness(nullptr), device_anchors(nullptr),
+      device_image_sizes(nullptr), device_num_anchors_per_level(nullptr),
+      device_temp_buffer(nullptr) {}
   } buffers_;
 
   // CUDA stream
