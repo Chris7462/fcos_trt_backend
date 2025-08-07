@@ -39,14 +39,23 @@ class FCOSBackbone(Module):
         # Convert to list as expected by head and anchor_generator
         features_list = list(features.values())
 
+        # Generate anchors - pass both images and features
+        anchors = self.anchor_generator(images, features_list)
+
         # Get predictions from head
         head_outputs = self.head(features_list)
+
+        # Calculate num_anchors_per_level for consistency with original forward
+        num_anchors_per_level = [x.size(2) * x.size(3) for x in features_list]
 
         # Return raw outputs without NMS post-processing
         return {
             'cls_logits': head_outputs['cls_logits'],
             'bbox_regression': head_outputs['bbox_regression'],
-            'bbox_ctrness': head_outputs['bbox_ctrness']
+            'bbox_ctrness': head_outputs['bbox_ctrness'],
+            'anchors': anchors[0],
+            'image_sizes': torch.tensor(images.image_sizes[0]),
+            'num_anchors_per_level': torch.tensor(num_anchors_per_level)
         }
 
 def export_fcos_model(output_path, input_height, input_width):
@@ -71,7 +80,10 @@ def export_fcos_model(output_path, input_height, input_width):
             output_names=[
                 'cls_logits',
                 'bbox_regression',
-                'bbox_ctrness'],
+                'bbox_ctrness',
+                'anchors',
+                'image_sizes',
+                'num_anchors_per_level'],
             verbose=True
             # Note: Dynamic axes might be tricky with list inputs and anchor generation
             # Consider using fixed batch size for more reliable ONNX export
