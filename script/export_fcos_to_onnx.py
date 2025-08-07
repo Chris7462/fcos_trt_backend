@@ -1,18 +1,23 @@
+#!/usr/bin/env python3
+"""Script to export a pre-trained FCOS model to ONNX format for TensorRT or C++ inference."""
+
 import argparse
-import cv2
+from collections import OrderedDict
 import os
+
 import torch
+from torch.nn import Module
 from torchvision.models.detection import fcos_resnet50_fpn
 from torchvision.models.detection import FCOS_ResNet50_FPN_Weights
-from torchvision.transforms.functional import to_tensor
-from collections import OrderedDict
 
 
-class FCOSBackbone(torch.nn.Module):
+class FCOSBackbone(Module):
+    '''Wrapper to extract only the Backbone from FCOS model.'''
+
     def __init__(self):
         super().__init__()
         # Load pretrained FCOS model
-        print("Loading pretrained FCOS model...")
+        print('Loading pretrained FCOS model...')
         self.model = fcos_resnet50_fpn(weights=FCOS_ResNet50_FPN_Weights.DEFAULT)
         self.model.eval()
         self.backbone = self.model.backbone
@@ -44,59 +49,71 @@ class FCOSBackbone(torch.nn.Module):
             'bbox_ctrness': head_outputs['bbox_ctrness']
         }
 
-ap = argparse.ArgumentParser()
-ap.add_argument('--height', type=int, default=374,
-                help='Input image height')
-ap.add_argument('--width', type=int, default=1238,
-                help='Input image width')
-ap.add_argument('-o', '--output-dir', type=str, default='onnxs',
-                help='Path to save the exported model')
-args = vars(ap.parse_args())
-#args = {'output_dir': './fcos_trt_backend/models', 'height': 374, 'width': 1238}
+def export_fcos_model(output_path, input_height, input_width):
+    print("Creating pretrained FCOS backbone model...")
 
-# Create output directory if it doesn't exist
-os.makedirs(args['output_dir'], exist_ok=True)
+    # Create backbone-only version
+    model = FCOSBackbone()
 
-# Load pretrained FCOS model
-print("Creating pretrained FCOS backbone model...")
-# Create backbone-only version
-model = FCOSBackbone()
-model.eval()
+    print('Preparing dummy input...')
+    dummy_input = torch.randn(1, 3, input_height, input_width)
 
-# Create dummy input - note: input should be a list of tensors for proper transform handling
-height, width = args['height'], args['width']
-dummy_input = [torch.randn(3, height, width)]  # List of tensors, not batched tensor
+    print('Exporting to ONNX...')
+    try:
+        torch.onnx.export(
+            model,
+            dummy_input,
+            output_path,
+            export_params=True,
+            opset_version=17,
+            do_constant_folding=True,
+            input_names=['input'],
+            output_names=[
+                'cls_logits',
+                'bbox_regression',
+                'bbox_ctrness'],
+            verbose=True
+            # Note: Dynamic axes might be tricky with list inputs and anchor generation
+            # Consider using fixed batch size for more reliable ONNX export
+        )
+        print(f'ONNX model saved to: {output_path}')
+    except Exception as e:
+        print(f'✗ ONNX export failed: {e}')
+        raise
 
-print(f"Exporting model with input size: {height}x{width}")
+    # Test the exported model
+    print("\nTesting ONNX model...")
+    try:
+        import onnx
+        onnx_model = onnx.load(output_path)
+        onnx.checker.check_model(onnx_model)
+        print("✓ ONNX model validation passed")
+    except ImportError:
+        print('⚠ ONNX package not available - skipping model validation')
+        print('  Install with: pip install onnx')
+    except Exception as e:
+        print(f'✗ ONNX model validation failed: {e}')
 
-# Export to ONNX (backbone + heads only, no NMS)
-output_path = os.path.join(args['output_dir'], f'fcos_resnet50_fpn_{height}x{width}.onnx')
+if __name__ == '__main__':
+    # construct the argument parse and parse the arguments
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--height', type=int, default=374, help='The height of the input image')
+    ap.add_argument('--width', type=int, default=1238, help='The width of the input image')
+    ap.add_argument('--output-dir', type=str, default='onnxs',
+                    help='Path to save the exported model')
+    args = vars(ap.parse_args())
+    #args = {'height': 374, 'width': 1238, 'output_dir': 'fcos_trt_backend/onnxs'}
 
-torch.onnx.export(
-    model,
-    dummy_input,
-    output_path,
-    export_params=True,
-    opset_version=11,
-    do_constant_folding=True,
-    input_names=['input'],
-    output_names=[
-        'cls_logits',
-        'bbox_regression',
-        'bbox_ctrness'
-    ],
-    # Note: Dynamic axes might be tricky with list inputs and anchor generation
-    # Consider using fixed batch size for more reliable ONNX export
-    verbose=True
-)
+    # Create output directory if it doesn't exist
+    os.makedirs(args['output_dir'], exist_ok=True)
 
-print(f"✓ Backbone model successfully exported to ONNX format as '{output_path}'")
-print("✓ Model outputs raw predictions without NMS post-processing")
-print("⚠ Note: You'll need to implement NMS separately in your inference pipeline")
+    height = args['height']
+    width = args['width']
+    output_dir = args['output_dir']
 
-# Test the exported model
-print("\nTesting ONNX model...")
-import onnx
-onnx_model = onnx.load(output_path)
-onnx.checker.check_model(onnx_model)
-print("✓ ONNX model validation passed")
+    # Export to ONNX (backbone + heads only, no NMS)
+    print(f'=== Exporting FCOS backbone for input size: {height}x{width} ===')
+    output_path = os.path.join(output_dir, f'fcos_resnet50_fpn_{height}x{width}.onnx')
+    export_fcos_model(output_path=output_path, input_width=width, input_height=height)
+
+    print('ONNX export completed.')
