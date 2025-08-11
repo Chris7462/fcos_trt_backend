@@ -486,7 +486,7 @@ def run_inference_comparison(image_path, onnx_path, height, width, confidence_th
 
     # 5. Summary
     print(f"\n=== Final Summary ===")
-    
+
     if results_match:
         print(f"🎉 PERFECT: ONNX model + postprocessing implementation matches original FCOS!")
         print("Your ONNX model is working correctly.")
@@ -506,9 +506,9 @@ if __name__ == '__main__':
                         help='Path to test image')
     parser.add_argument('--onnx-path', type=str, required=True,
                         help='Path to ONNX model file')
-    parser.add_argument('--height', type=int, required=True,
+    parser.add_argument('--height', type=int, default=374,
                         help='Input height for ONNX model')
-    parser.add_argument('--width', type=int, required=True,
+    parser.add_argument('--width', type=int, default=1238,
                         help='Input width for ONNX model')
     parser.add_argument('--confidence', type=float, default=0.5,
                         help='Confidence threshold for visualization')
