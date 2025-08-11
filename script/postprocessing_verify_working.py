@@ -505,7 +505,7 @@ if __name__ == '__main__':
 
     #   args = parser.parse_args()
     args = argparse.Namespace()
-    args.image_path = f'./fcos_trt_backend/test/image_000.png'
+    args.image_path = f'./test/image_000.png'
     args.confidence = 0.5
     args.tolerance = 1e-4
 

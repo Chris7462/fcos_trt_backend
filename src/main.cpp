@@ -1,19 +1,17 @@
 #include <iostream>
 #include <string>
-
-// OpenCV includes
 #include <opencv2/opencv.hpp>
 
-// local header files
+// Local includes
 #include "fcos_trt_backend/fcos_trt_backend.hpp"
 #include "fcos_trt_backend/post_processor.hpp"
 #include "fcos_trt_backend/exception.hpp"
 
-
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[])
+{
+  // Parse command line arguments
   if (argc != 3) {
     std::cerr << "Usage: " << argv[0] << " <engine_path> <image_path>" << std::endl;
-    std::cerr << "Example: ./fcos_inference engines/fcos_resnet50_fpn_374x1238.engine test/image_000.png" << std::endl;
     return -1;
   }
 
@@ -21,62 +19,81 @@ int main(int argc, char* argv[]) {
   std::string image_path = argv[2];
 
   try {
+    std::cout << "=== FCOS TensorRT + Postprocessing Demo ===" << std::endl;
+    std::cout << "Engine path: " << engine_path << std::endl;
+    std::cout << "Image path: " << image_path << std::endl;
+
     // Load test image
     cv::Mat image = cv::imread(image_path);
     if (image.empty()) {
-      std::cerr << "Error: Cannot load image: " << image_path << std::endl;
+      std::cerr << "Error: Could not load image from " << image_path << std::endl;
       return -1;
     }
 
-    cv::Size original_size(image.cols, image.rows);
-    std::cout << "Loaded image: " << image_path << " (height, width) = (" << image.rows << ", " << image.cols << ")" << std::endl;
+    std::cout << "Loaded image: " << image.cols << "x" << image.rows << std::endl;
 
-    // Initialize FCOS TensorRT inference
-    fcos_trt_backend::FCOSTrtBackend::Config trt_config;
-    fcos_trt_backend::FCOSTrtBackend fcos_trt(engine_path, trt_config);
+    // Initialize TensorRT backend
+    std::cout << "\n=== Initializing TensorRT Backend ===" << std::endl;
+    fcos_trt_backend::FCOSTrtBackend::Config config;
+    // Use default config values (374x1238)
 
-    // Initialize post-processor
-    fcos_trt_backend::FCOSPostProcessor::Config postprocess_config;
-    postprocess_config.score_thresh = 0.2f;
-    postprocess_config.nms_thresh = 0.6f;
-    postprocess_config.detections_per_img = 100;
-    postprocess_config.topk_candidates = 1000;
-    fcos_trt_backend::FCOSPostProcessor postprocessor(postprocess_config);
+    fcos_trt_backend::FCOSTrtBackend backend(engine_path, config);
+
+    // Initialize postprocessor
+    std::cout << "\n=== Initializing Postprocessor ===" << std::endl;
+    fcos_trt_backend::FCOSPostProcessor::Config post_config;
+    post_config.score_thresh = 0.2f;
+    post_config.nms_thresh = 0.6f;
+    post_config.detections_per_img = 100;
+    post_config.topk_candidates = 1000;
+
+    fcos_trt_backend::FCOSPostProcessor postprocessor(post_config);
 
     // Run inference
-    std::cout << "\nRunning TensorRT inference..." << std::endl;
-    auto raw_results = fcos_trt.infer(image);
+    std::cout << "\n=== Running Inference ===" << std::endl;
+    auto raw_outputs = backend.infer(image);
 
-    // Print raw results
-    fcos_trt.print_results(raw_results);
+    // Print raw inference results
+    backend.print_results(raw_outputs);
 
-    // Run post-processing
-    std::cout << "\nRunning post-processing..." << std::endl;
-    cv::Size processed_size(trt_config.width, trt_config.height);
-    auto final_results = postprocessor.postprocess(raw_results, original_size, processed_size);
+    // Run postprocessing
+    std::cout << "\n=== Running Postprocessing ===" << std::endl;
+    auto detection_results = postprocessor.postprocess_detections(raw_outputs);
 
-    // Print final detection results
-    std::cout << "\n=== FINAL DETECTION RESULTS ===" << std::endl;
-    std::cout << "Number of detections: " << final_results.detections.size() << std::endl;
+    // Print postprocessed results
+    postprocessor.print_detection_results(detection_results, 20);
 
-    for (size_t i = 0; i < final_results.detections.size(); ++i) {
-      const auto& detection = final_results.detections[i];
-      std::cout << "Detection " << (i + 1) << ":" << std::endl;
-      std::cout << "  Class ID: " << detection.label << std::endl;
-      std::cout << "  Score: " << detection.score << std::endl;
-      std::cout << "  Box: [" << detection.box.x << ", " << detection.box.y
-        << ", " << (detection.box.x + detection.box.width)
-        << ", " << (detection.box.y + detection.box.height) << "]" << std::endl;
+    // Print first 20 values for verification (matching Python script)
+    std::cout << "\n=== First 20 Values for Verification ===" << std::endl;
+
+    std::cout << "Boxes (first 20):" << std::endl;
+    int box_count = std::min(20, static_cast<int>(detection_results.boxes.size()));
+    for (int i = 0; i < box_count; ++i) {
+      const auto& box = detection_results.boxes[i];
+      std::cout << "[" << box.x << ", " << box.y << ", "
+        << (box.x + box.width) << ", " << (box.y + box.height) << "] ";
+      if ((i + 1) % 4 == 0) std::cout << std::endl;
     }
+    std::cout << std::endl;
 
-    std::cout << "\n✓ Inference and post-processing completed successfully!" << std::endl;
+    std::cout << "Scores (first 20):" << std::endl;
+    int score_count = std::min(20, static_cast<int>(detection_results.scores.size()));
+    for (int i = 0; i < score_count; ++i) {
+      std::cout << detection_results.scores[i] << " ";
+      if ((i + 1) % 10 == 0) std::cout << std::endl;
+    }
+    std::cout << std::endl;
 
-  } catch (const fcos_trt_backend::TensorRTException& e) {
-    std::cerr << "TensorRT Error: " << e.what() << std::endl;
-    return -1;
-  } catch (const fcos_trt_backend::CudaException& e) {
-    std::cerr << "CUDA Error: " << e.what() << std::endl;
-    return -1;
+    std::cout << "Labels (first 20):" << std::endl;
+    int label_count = std::min(20, static_cast<int>(detection_results.labels.size()));
+    for (int i = 0; i < label_count; ++i) {
+      std::cout << detection_results.labels[i] << " ";
+      if ((i + 1) % 10 == 0) std::cout << std::endl;
+    }
+    std::cout << std::endl;
+
+    std::cout << "\n=== Demo completed successfully! ===" << std::endl;
+
   } catch (const std::exception& e) {
     std::cerr << "Error: " << e.what() << std::endl;
     return -1;
