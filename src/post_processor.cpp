@@ -210,28 +210,29 @@ DetectionResult FCOSPostProcessor::postprocess_detections(
       float x2 = anchors[anchor_idx * 4 + 2];
       float y2 = anchors[anchor_idx * 4 + 3];
 
-      // Extract regression values
-      float dx = bbox_regression[anchor_idx * 4];
-      float dy = bbox_regression[anchor_idx * 4 + 1];
-      float dw = bbox_regression[anchor_idx * 4 + 2];
-      float dh = bbox_regression[anchor_idx * 4 + 3];
+      // Extract regression values (these are l, t, r, b distances, NOT dx, dy, dw, dh!)
+      float l = bbox_regression[anchor_idx * 4];      // left distance
+      float t = bbox_regression[anchor_idx * 4 + 1];  // top distance
+      float r = bbox_regression[anchor_idx * 4 + 2];  // right distance
+      float b = bbox_regression[anchor_idx * 4 + 3];  // bottom distance
 
-      // Decode box (simplified box coder logic)
+      // Calculate anchor center
       float anchor_width = x2 - x1;
       float anchor_height = y2 - y1;
       float anchor_cx = x1 + 0.5f * anchor_width;
       float anchor_cy = y1 + 0.5f * anchor_height;
 
-      // KEY FIX: This matches PyTorch's BoxLinearCoder with normalize_by_size=True
-      float pred_cx = dx * anchor_width + anchor_cx;     // dx is already normalized
-      float pred_cy = dy * anchor_height + anchor_cy;    // dy is already normalized  
-      float pred_width = std::exp(dw) * anchor_width;    // exponential scaling
-      float pred_height = std::exp(dh) * anchor_height;  // exponential scaling
+      // Scale regression values by anchor size
+      float l_scaled = l * anchor_width;
+      float t_scaled = t * anchor_height;
+      float r_scaled = r * anchor_width;
+      float b_scaled = b * anchor_height;
 
-      float pred_x1 = pred_cx - 0.5f * pred_width;
-      float pred_y1 = pred_cy - 0.5f * pred_height;
-      float pred_x2 = pred_cx + 0.5f * pred_width;
-      float pred_y2 = pred_cy + 0.5f * pred_height;
+      // Then decode using scaled values
+      float pred_x1 = anchor_cx - l_scaled;
+      float pred_y1 = anchor_cy - t_scaled;
+      float pred_x2 = anchor_cx + r_scaled;
+      float pred_y2 = anchor_cy + b_scaled;
 
       if (count < 20) {
         std::cout << "[" << pred_x1 << ", " << pred_y1 << ", " << pred_x2 << ", " << pred_y2 << "]\n";

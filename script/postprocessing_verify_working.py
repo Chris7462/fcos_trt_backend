@@ -335,15 +335,15 @@ if __name__ == '__main__':
             boxes_per_level = box_coder.decode(
                 bbox_regression_per_level[anchor_idxs], anchors_per_level[anchor_idxs]
             )
+            print("boxes_per_level = ", boxes_per_level[:20])
+            print("scores_per_level = ", scores_per_level[:20])
+            print("labels_per_level = ", labels_per_level[:20])
+
             boxes_per_level = box_ops.clip_boxes_to_image(boxes_per_level, image_shape)
 
             image_boxes.append(boxes_per_level)
             image_scores.append(scores_per_level)
             image_labels.append(labels_per_level)
-
-            print("boxes_per_level = ", boxes_per_level[:20])
-            print("scores_per_level = ", scores_per_level[:20])
-            print("labels_per_level = ", labels_per_level[:20])
 
         # Concatenate results from all levels
         image_boxes = torch.cat(image_boxes, dim=0)
