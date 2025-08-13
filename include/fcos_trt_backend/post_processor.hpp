@@ -52,6 +52,14 @@ public:
   // Utility method to print results
   void print_detection_results(const DetectionResult& results, int max_detections = 20);
 
+  // Visualization method to plot detections on image
+  void plot_detections(
+    const std::string& image_path,
+    const DetectionResult& detections,
+    const std::string& title,
+    float confidence_threshold = 0.5f,
+    const std::string& output_path = "detection_results.png");
+
 private:
   Config config_;
 

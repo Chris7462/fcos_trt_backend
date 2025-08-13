@@ -36,8 +36,7 @@ add_custom_command(
 add_custom_command(
   OUTPUT ${ENGINE_PATH}
   COMMAND ${TRTEXEC_EXECUTABLE} --onnx=${ONNX_PATH} --saveEngine=${ENGINE_PATH}
-          #--memPoolSize=workspace:4096 --fp16 --verbose
-          --memPoolSize=workspace:4096 --verbose
+          --memPoolSize=workspace:4096 --fp16 --verbose
   DEPENDS ${ONNX_PATH}
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   COMMENT "Generating TensorRT engine: ${ENGINE_FILE}..."
