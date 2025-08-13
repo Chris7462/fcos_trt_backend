@@ -43,8 +43,11 @@ public:
 
   explicit FCOSPostProcessor(const Config& config = Config());
 
-  // Main postprocessing method
-  DetectionResult postprocess_detections(const FCOSTrtBackend::DetectionResults& raw_outputs);
+  // Main postprocessing method - now takes original image dimensions
+  DetectionResult postprocess_detections(
+    const FCOSTrtBackend::DetectionResults& raw_outputs,
+    int original_height,
+    int original_width);
 
   // Utility method to print results
   void print_detection_results(const DetectionResult& results, int max_detections = 20);
@@ -74,6 +77,14 @@ private:
   cv::Rect2f clip_box_to_image(const cv::Rect2f& box, int image_height, int image_width);
 
   std::vector<int> topk_indices(const std::vector<float>& scores, int k);
+
+  // Transform coordinates from processed image space to original image space
+  DetectionResult transform_coordinates_to_original(
+    const DetectionResult& detections,
+    int processed_height,
+    int processed_width,
+    int original_height,
+    int original_width);
 
   // Get class name from COCO category ID
   std::string get_class_name(int coco_id) const;
