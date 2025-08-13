@@ -27,10 +27,11 @@ COCO_INSTANCE_CATEGORY_NAMES = {
     78: 'microwave', 79: 'oven', 80: 'toaster', 81: 'sink', 82: 'refrigerator',
     84: 'book', 85: 'clock', 86: 'vase', 87: 'scissors', 88: 'teddy bear',
     89: 'hair drier', 90: 'toothbrush'}
-    # IDs 12, 26, 29, 30, 45, 66, 68, 69, 71, 83 are not used (they were categories in early drafts of COCO but removed).
+# IDs 12, 26, 29, 30, 45, 66, 68, 69, 71, 83 are not used
+# they were categories in early drafts of COCO but removed.
 
 # Load image using OpenCV and convert to RGB
-image_path = 'fcos_trt_backend/test/image_000.png'
+image_path = './test/image_000.png'
 image_bgr = cv2.imread(image_path)
 image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
 
@@ -51,19 +52,27 @@ scores = outputs['scores']
 labels = outputs['labels']
 confidence_threshold = 0.5
 
-print("Detected objects:")
-for i, (box, score, label) in enumerate(zip(boxes, scores, labels)):
+detection_count = 0
+
+print('Detected objects:')
+for box, score, label in zip(boxes, scores, labels):
     if score >= confidence_threshold:
+        detection_count += 1
+
         # Convert label to integer for dictionary lookup
         label_id = label.item()
 
         # Get class name using dictionary lookup (handles gaps correctly)
         class_name = COCO_INSTANCE_CATEGORY_NAMES.get(label_id, f'unknown_class_{label_id}')
 
-        print(f"Detection {i+1}: {class_name} (ID: {label_id}) - Confidence: {score:.3f}")
+        # Get object bounding box
+        x1, y1, x2, y2 = map(int, box)
+
+        # Print detection outputs with bounding box
+        print(f"Detection {detection_count}: {class_name} (ID: {label_id}) - Confidence: {score:.3f}")
+        print(f"  Box: [{x1}, {y1}, {x2}, {y2}]")
 
         # Draw bounding box
-        x1, y1, x2, y2 = map(int, box)
         cv2.rectangle(image_bgr, (x1, y1), (x2, y2), (0, 0, 255), 2)
 
         # Draw label and score
@@ -71,17 +80,11 @@ for i, (box, score, label) in enumerate(zip(boxes, scores, labels)):
         cv2.putText(image_bgr, label_text, (x1, y1 - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
 
+print(f"Total detections above 0.5 confidence: {detection_count}")
+
 # Show result using matplotlib
 plt.figure(figsize=(10, 8))
 plt.imshow(cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB))
 plt.axis('off')
 plt.title('FCOS Object Detection')
 plt.show()
-
-# Optional: Print all unique label IDs found in the detections
-unique_labels = torch.unique(labels)
-print(f"\nAll detected label IDs: {unique_labels.tolist()}")
-print("Corresponding class names:")
-for label_id in unique_labels:
-    class_name = COCO_INSTANCE_CATEGORY_NAMES.get(label_id.item(), f'unknown_class_{label_id.item()}')
-    print(f"  ID {label_id.item()}: {class_name}")
