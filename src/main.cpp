@@ -53,36 +53,36 @@ int main(int argc, char* argv[])
     // Print postprocessed results
     //postprocessor.print_detection_results(detection_results, 20);
 
-  //// Print first 20 values for verification (matching Python script)
-  //std::cout << "\n=== First 20 Values for Verification ===" << std::endl;
+    // Print first 20 values for verification (matching Python script)
+    std::cout << "\n=== First 20 Values for Verification ===" << std::endl;
 
-  //std::cout << "Boxes (first 20):" << std::endl;
-  //int box_count = std::min(20, static_cast<int>(detection_results.boxes.size()));
-  //for (int i = 0; i < box_count; ++i) {
-  //  const auto& box = detection_results.boxes[i];
-  //  std::cout << "[" << box.x << ", " << box.y << ", "
-  //    << (box.x + box.width) << ", " << (box.y + box.height) << "] ";
-  //  if ((i + 1) % 4 == 0) std::cout << std::endl;
-  //}
-  //std::cout << std::endl;
+    std::cout << "Boxes (first 20):" << std::endl;
+    int box_count = std::min(20, static_cast<int>(detection_results.boxes.size()));
+    for (int i = 0; i < box_count; ++i) {
+      const auto& box = detection_results.boxes[i];
+      std::cout << "[" << box.x << ", " << box.y << ", "
+        << (box.x + box.width) << ", " << (box.y + box.height) << "] ";
+      if ((i + 1) % 4 == 0) std::cout << std::endl;
+    }
+    std::cout << std::endl;
 
-  //std::cout << "Scores (first 20):" << std::endl;
-  //int score_count = std::min(20, static_cast<int>(detection_results.scores.size()));
-  //for (int i = 0; i < score_count; ++i) {
-  //  std::cout << detection_results.scores[i] << " ";
-  //  if ((i + 1) % 10 == 0) std::cout << std::endl;
-  //}
-  //std::cout << std::endl;
+    std::cout << "Scores (first 20):" << std::endl;
+    int score_count = std::min(20, static_cast<int>(detection_results.scores.size()));
+    for (int i = 0; i < score_count; ++i) {
+      std::cout << detection_results.scores[i] << " ";
+      if ((i + 1) % 10 == 0) std::cout << std::endl;
+    }
+    std::cout << std::endl;
 
-  //std::cout << "Labels (first 20):" << std::endl;
-  //int label_count = std::min(20, static_cast<int>(detection_results.labels.size()));
-  //for (int i = 0; i < label_count; ++i) {
-  //  std::cout << detection_results.labels[i] << " ";
-  //  if ((i + 1) % 10 == 0) std::cout << std::endl;
-  //}
-  //std::cout << std::endl;
+    std::cout << "Labels (first 20):" << std::endl;
+    int label_count = std::min(20, static_cast<int>(detection_results.labels.size()));
+    for (int i = 0; i < label_count; ++i) {
+      std::cout << detection_results.labels[i] << " ";
+      if ((i + 1) % 10 == 0) std::cout << std::endl;
+    }
+    std::cout << std::endl;
 
-  //std::cout << "\n=== Demo completed successfully! ===" << std::endl;
+    std::cout << "\n=== Demo completed successfully! ===" << std::endl;
 
   } catch (const std::exception& e) {
     std::cerr << "Error: " << e.what() << std::endl;

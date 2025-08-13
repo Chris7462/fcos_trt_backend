@@ -314,11 +314,6 @@ if __name__ == '__main__':
             scores_per_level = scores_per_level[keep_idxs]
             topk_idxs = torch.where(keep_idxs)[0]
 
-            # ===== Debug info =====
-            if len(scores_per_level) != 0:
-                print("score size per level = ", len(scores_per_level))
-                print(f"score[20] = {scores_per_level[19]:.6f}")
-
             # Keep only topk scoring predictions
             num_topk = det_utils._topk_min(topk_idxs, topk_candidates, 0)
             scores_per_level, idxs = scores_per_level.topk(num_topk)
@@ -329,16 +324,9 @@ if __name__ == '__main__':
             labels_per_level = topk_idxs % num_classes
 
             # Decode bounding boxes
-            print("bbox_regression_per_level[:20] = ", bbox_regression_per_level[:20])
-            print("anchors_per_level[:20] = ", anchors_per_level[:20])
-            print("anchor_idxs[:20] = ", anchor_idxs[:20])
             boxes_per_level = box_coder.decode(
                 bbox_regression_per_level[anchor_idxs], anchors_per_level[anchor_idxs]
             )
-            print("boxes_per_level = ", boxes_per_level[:20])
-            print("scores_per_level = ", scores_per_level[:20])
-            print("labels_per_level = ", labels_per_level[:20])
-
             boxes_per_level = box_ops.clip_boxes_to_image(boxes_per_level, image_shape)
 
             image_boxes.append(boxes_per_level)
@@ -350,12 +338,22 @@ if __name__ == '__main__':
         image_scores = torch.cat(image_scores, dim=0)
         image_labels = torch.cat(image_labels, dim=0)
 
-#       # Apply NMS
-#       keep = box_ops.batched_nms(image_boxes, image_scores, image_labels, self.nms_thresh)
-#       keep = keep[:self.detections_per_img]
+        # Apply NMS
+        keep = box_ops.batched_nms(image_boxes, image_scores, image_labels, nms_thresh)
+        keep = keep[:detections_per_img]
 
-#       detections.append({
-#           "boxes": image_boxes[keep],
-#           "scores": image_scores[keep],
-#           "labels": image_labels[keep],
-#       })
+        detections.append({
+            "boxes": image_boxes[keep],
+            "scores": image_scores[keep],
+            "labels": image_labels[keep],
+        })
+
+    print("Boxes (first 20)")
+    print(detections[0]['boxes'][:20])
+
+    print("\nScores (first 20)")
+    print(detections[0]['scores'][:20])
+
+    print("\nLabels (first 20)")
+    print(detections[0]['labels'][:20])
+

@@ -149,58 +149,10 @@ DetectionResult FCOSPostProcessor::postprocess_detections(
     if (level_scores.empty()) {
       continue;
     }
-    // ===== Debug info =====
-    std::cout << "score size per level = " << level_scores.size() << std::endl;
-    std::cout << "score[20] = " << level_scores.at(19) << std::endl;
-
     // Apply top-k filtering
     std::vector<int> topk_idx = topk_indices(level_scores, config_.topk_candidates);
-    std::cout << "size of topk_idx = " << topk_idx.size() << std::endl;
 
     // Decode boxes for kept detections
-    std::cout << "bbox_regression_per_level[:20] = ";
-    int mod = 0;
-    for (auto box : bbox_regression) {
-      if (mod % 4 == 3) {
-        std::cout << box << std::endl;
-      } else {
-        std::cout << box << " ";
-      }
-      ++mod;
-      if (mod == 80) {
-        break;
-      }
-    }
-    std::cout << std::endl;
-
-    std::cout << "anchors_per_level[:20] = ";
-    mod = 0;
-    for (auto an : anchors) {
-      if (mod % 4 == 3) {
-        std::cout << an << std::endl;
-      } else {
-        std::cout << an << " ";
-      }
-      ++mod;
-      if (mod == 80) {
-        break;
-      }
-    }
-    std::cout << std::endl;
-
-    int count = 0;
-    std::cout << "anchors_idx[:20] = ";
-    for (int idx : topk_idx) {
-      size_t anchor_idx = keep_indices[idx];
-      if (count < 20) {
-        std::cout << anchor_idx << " ";
-      }
-      ++count;
-    }
-    std::cout << std::endl;
-
-    count = 0;
-    std::cout << "boxes_per_level = ";
     for (int idx : topk_idx) {
       size_t anchor_idx = keep_indices[idx];
 
@@ -234,37 +186,13 @@ DetectionResult FCOSPostProcessor::postprocess_detections(
       float pred_x2 = anchor_cx + r_scaled;
       float pred_y2 = anchor_cy + b_scaled;
 
-      if (count < 20) {
-        std::cout << "[" << pred_x1 << ", " << pred_y1 << ", " << pred_x2 << ", " << pred_y2 << "]\n";
-        ++count;
-      }
-
       // Clip to image boundaries
       cv::Rect2f box(pred_x1, pred_y1, pred_x2 - pred_x1, pred_y2 - pred_y1);
       box = clip_box_to_image(box, image_height, image_width);
       all_boxes.push_back(box);
-    }
-
-    std::cout << "\nscores_per_level = ";
-    count = 0;
-    for (int idx : topk_idx) {
-      if (count < 20) {
-        std::cout << level_scores[idx] << " ";
-        ++count;
-      }
       all_scores.push_back(level_scores[idx]);
-    }
-
-    std::cout << "\nlabels_per_level = ";
-    count = 0;
-    for (int idx : topk_idx) {
-      if (count < 20) {
-        std::cout << level_labels[idx] << " ";
-        ++count;
-      }
       all_labels.push_back(level_labels[idx]); // COCO category ID
     }
-    std::cout << std::endl;
   }
 
   std::cout << "Collected " << all_boxes.size() << " candidate detections" << std::endl;
