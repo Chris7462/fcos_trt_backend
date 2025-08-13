@@ -493,7 +493,7 @@ void FCOSPostProcessor::plot_detections(
 
     cv::Mat image_for_plot = image.clone();
 
-    std::cout << "\n=== " << title << " Detection Results ===" << std::endl;
+    std::cout << "\n=== " << title << " ===" << std::endl;
     int detection_count = 0;
 
     // Draw predictions with confidence > threshold
@@ -547,7 +547,7 @@ void FCOSPostProcessor::plot_detections(
 
     // Add title to the image
     cv::putText(image_for_plot, title, cv::Point(30, 50),
-               cv::FONT_HERSHEY_SIMPLEX, 1.2, cv::Scalar(0, 0, 255), 3);
+               cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(0, 0, 255), 2);
 
     // Save the result
     if (cv::imwrite(output_path, image_for_plot)) {
