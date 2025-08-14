@@ -47,14 +47,14 @@ int main(int argc, char* argv[])
     fcos_trt_backend::FCOSPostProcessor postprocessor(score_thresh, nms_thresh, detections_per_img, topk_candidates);
 
     // Run inference
-    auto raw_outputs = backend.infer(image);
+    auto head_outputs = backend.infer(image);
 
     // Print raw inference results
-    //backend.print_results(raw_outputs);
+    //backend.print_results(head_outputs);
 
     // Run postprocessing with original image dimensions
     auto detection_results = postprocessor.postprocess_detections(
-      raw_outputs,
+      head_outputs,
       original_height,
       original_width
     );

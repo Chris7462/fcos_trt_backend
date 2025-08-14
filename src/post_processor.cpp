@@ -41,26 +41,26 @@ std::string FCOSPostProcessor::get_class_name(int coco_id) const
 }
 
 Detections FCOSPostProcessor::postprocess_detections(
-    const FCOSTrtBackend::HeadOutputs& raw_outputs,
+    const FCOSTrtBackend::HeadOutputs& head_outputs,
     int original_height,
     int original_width)
 {
   std::cout << "\n=== Starting FCOS Postprocessing ===" << std::endl;
 
   // Extract image dimensions from image_sizes (these are the processed dimensions)
-  if (raw_outputs.image_sizes.size() != 2) {
+  if (head_outputs.image_sizes.size() != 2) {
     throw std::runtime_error("Expected image_sizes to have 2 elements [height, width]");
   }
-  int processed_height = static_cast<int>(raw_outputs.image_sizes[0]);
-  int processed_width = static_cast<int>(raw_outputs.image_sizes[1]);
+  int processed_height = static_cast<int>(head_outputs.image_sizes[0]);
+  int processed_width = static_cast<int>(head_outputs.image_sizes[1]);
 
   std::cout << "Processed image dimensions: " << processed_height << "x" << processed_width << std::endl;
   std::cout << "Original image dimensions: " << original_height << "x" << original_width << std::endl;
 
   // Get number of classes from cls_logits shape
   // Assuming cls_logits is flattened: [total_anchors * num_classes]
-  size_t total_anchors = raw_outputs.anchors.size() / 4;  // 4 coords per anchor
-  size_t num_classes = raw_outputs.cls_logits.size() / total_anchors;
+  size_t total_anchors = head_outputs.anchors.size() / 4;  // 4 coords per anchor
+  size_t num_classes = head_outputs.cls_logits.size() / total_anchors;
 
   std::cout << "Total anchors: " << total_anchors << std::endl;
   std::cout << "Number of classes: " << num_classes << std::endl;
@@ -72,23 +72,23 @@ Detections FCOSPostProcessor::postprocess_detections(
 
   // Split tensors by pyramid levels
   auto cls_logits_per_level = split_tensor_by_levels(
-      raw_outputs.cls_logits, raw_outputs.num_anchors_per_level, num_classes);
+      head_outputs.cls_logits, head_outputs.num_anchors_per_level, num_classes);
   auto bbox_regression_per_level = split_tensor_by_levels(
-      raw_outputs.bbox_regression, raw_outputs.num_anchors_per_level, 4);
+      head_outputs.bbox_regression, head_outputs.num_anchors_per_level, 4);
   auto bbox_ctrness_per_level = split_tensor_by_levels(
-      raw_outputs.bbox_ctrness, raw_outputs.num_anchors_per_level, 1);
+      head_outputs.bbox_ctrness, head_outputs.num_anchors_per_level, 1);
 
   // Split anchors by levels
   std::vector<std::vector<float>> anchors_per_level;
   size_t anchor_offset = 0;
-  for (size_t level = 0; level < raw_outputs.num_anchors_per_level.size(); ++level) {
-    size_t level_anchors = raw_outputs.num_anchors_per_level[level];
+  for (size_t level = 0; level < head_outputs.num_anchors_per_level.size(); ++level) {
+    size_t level_anchors = head_outputs.num_anchors_per_level[level];
     size_t start_idx = anchor_offset * 4;
     size_t end_idx = (anchor_offset + level_anchors) * 4;
 
     std::vector<float> level_anchor_data(
-        raw_outputs.anchors.begin() + start_idx,
-        raw_outputs.anchors.begin() + end_idx
+        head_outputs.anchors.begin() + start_idx,
+        head_outputs.anchors.begin() + end_idx
         );
     anchors_per_level.push_back(level_anchor_data);
     anchor_offset += level_anchors;
@@ -108,7 +108,7 @@ Detections FCOSPostProcessor::postprocess_detections(
     const auto& bbox_ctrness = bbox_ctrness_per_level[level];
     const auto& anchors = anchors_per_level[level];
 
-    size_t level_anchors = raw_outputs.num_anchors_per_level[level];
+    size_t level_anchors = head_outputs.num_anchors_per_level[level];
 
     // Compute scores: sqrt(sigmoid(cls_score) * sigmoid(centerness))
     std::vector<float> level_scores;
