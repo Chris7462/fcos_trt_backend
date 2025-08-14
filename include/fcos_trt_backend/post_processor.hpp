@@ -25,23 +25,18 @@ struct DetectionResult
 class FCOSPostProcessor
 {
 public:
-  struct Config
-  {
-    float score_thresh;             // Score threshold for filtering
-    float nms_thresh;               // NMS threshold
-    int detections_per_img;         // Maximum detections per image
-    int topk_candidates;            // Top-k candidates before NMS
-    bool normalize_by_size;         // Box coder normalization flag
-
-    Config()
-      : score_thresh(0.2f),
-      nms_thresh(0.6f),
-      detections_per_img(100),
-      topk_candidates(1000),
-      normalize_by_size(true) {}
-  };
-
-  explicit FCOSPostProcessor(const Config& config = Config());
+  /**
+   * @brief Post processor for FCOS
+   * @param score_thresh Score threshold for filtering
+   * @param nms_thresh NMS threshold
+   * @param detections_per_img Maximum detections per image
+   * @param topk_candidates Top-k candidates before NMS
+   * @details Constructor with default valuse
+   */
+  explicit FCOSPostProcessor(const float score_thresh = 0.2f,
+    const float nms_thresh = 0.6f,
+    int detections_per_img = 100,
+    int topk_candidates = 1000);
 
   // Main postprocessing method - now takes original image dimensions
   DetectionResult postprocess_detections(
@@ -61,8 +56,6 @@ public:
     const std::string& output_path = "detection_results.png");
 
 private:
-  Config config_;
-
   // Helper methods for postprocessing pipeline
   std::vector<std::vector<float>> split_tensor_by_levels(
     const std::vector<float>& tensor,
@@ -96,6 +89,12 @@ private:
 
   // Get class name from COCO category ID
   std::string get_class_name(int coco_id) const;
+
+private:
+  const float score_thresh_;
+  const float nms_thresh_;
+  const int detections_per_img_;
+  const int topk_candidates_;
 };
 
 // COCO class names mapping with correct category IDs (with gaps)

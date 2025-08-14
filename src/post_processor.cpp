@@ -38,14 +38,18 @@ const std::unordered_map<int, std::string> COCO_CATEGORY_NAMES = {
   {89, "hair drier"}, {90, "toothbrush"}
 };
 
-FCOSPostProcessor::FCOSPostProcessor(const Config& config)
-  : config_(config)
+FCOSPostProcessor::FCOSPostProcessor(const float score_thresh,
+  const float nms_thresh,
+  const int detections_per_img,
+  const int topk_candidates)
+: score_thresh_(score_thresh), nms_thresh_(nms_thresh),
+  detections_per_img_(detections_per_img), topk_candidates_(topk_candidates)
 {
   std::cout << "FCOSPostProcessor initialized with:" << std::endl;
-  std::cout << "  Score threshold: " << config_.score_thresh << std::endl;
-  std::cout << "  NMS threshold: " << config_.nms_thresh << std::endl;
-  std::cout << "  Detections per image: " << config_.detections_per_img << std::endl;
-  std::cout << "  Top-k candidates: " << config_.topk_candidates << std::endl;
+  std::cout << "  Score threshold: " << score_thresh_ << std::endl;
+  std::cout << "  NMS threshold: " << nms_thresh_ << std::endl;
+  std::cout << "  Detections per image: " << detections_per_img_ << std::endl;
+  std::cout << "  Top-k candidates: " << topk_candidates_ << std::endl;
 }
 
 std::string FCOSPostProcessor::get_class_name(int coco_id) const
@@ -141,7 +145,7 @@ DetectionResult FCOSPostProcessor::postprocess_detections(
 
         float final_score = std::sqrt(cls_score * ctrness_score);
 
-        if (final_score > config_.score_thresh) {
+        if (final_score > score_thresh_) {
           level_scores.push_back(final_score);
           // Class index directly corresponds to COCO category ID
           level_labels.push_back(static_cast<int>(class_idx));
@@ -154,7 +158,7 @@ DetectionResult FCOSPostProcessor::postprocess_detections(
       continue;
     }
     // Apply top-k filtering
-    std::vector<int> topk_idx = topk_indices(level_scores, config_.topk_candidates);
+    std::vector<int> topk_idx = topk_indices(level_scores, topk_candidates_);
 
     // Decode boxes for kept detections
     for (int idx : topk_idx) {
@@ -202,10 +206,10 @@ DetectionResult FCOSPostProcessor::postprocess_detections(
   std::cout << "Collected " << all_boxes.size() << " candidate detections" << std::endl;
 
   // Apply NMS
-  std::vector<int> nms_indices = apply_nms(all_boxes, all_scores, all_labels, config_.nms_thresh);
+  std::vector<int> nms_indices = apply_nms(all_boxes, all_scores, all_labels, nms_thresh_);
 
   // Limit to max detections per image
-  int max_detections = std::min(config_.detections_per_img, static_cast<int>(nms_indices.size()));
+  int max_detections = std::min(detections_per_img_, static_cast<int>(nms_indices.size()));
   nms_indices.resize(max_detections);
 
   std::cout << "After NMS: " << nms_indices.size() << " final detections" << std::endl;

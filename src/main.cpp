@@ -39,13 +39,12 @@ int main(int argc, char* argv[])
     fcos_trt_backend::FCOSTrtBackend backend(engine_path, config);
 
     // Initialize postprocessor
-    fcos_trt_backend::FCOSPostProcessor::Config post_config;
-    post_config.score_thresh = 0.2f;
-    post_config.nms_thresh = 0.6f;
-    post_config.detections_per_img = 100;
-    post_config.topk_candidates = 1000;
+    const float score_thresh = 0.2f;
+    const float nms_thresh = 0.6f;
+    const int detections_per_img = 100;
+    const int topk_candidates = 1000;
 
-    fcos_trt_backend::FCOSPostProcessor postprocessor(post_config);
+    fcos_trt_backend::FCOSPostProcessor postprocessor(score_thresh, nms_thresh, detections_per_img, topk_candidates);
 
     // Run inference
     auto raw_outputs = backend.infer(image);
