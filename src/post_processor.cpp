@@ -40,7 +40,7 @@ std::string FCOSPostProcessor::get_class_name(int coco_id) const
   return "unknown_class_" + std::to_string(coco_id);
 }
 
-DetectionResult FCOSPostProcessor::postprocess_detections(
+Detections FCOSPostProcessor::postprocess_detections(
     const FCOSTrtBackend::HeadOutputs& raw_outputs,
     int original_height,
     int original_width)
@@ -194,7 +194,7 @@ DetectionResult FCOSPostProcessor::postprocess_detections(
   std::cout << "After NMS: " << nms_indices.size() << " final detections" << std::endl;
 
   // Prepare intermediate results (still in processed image coordinates)
-  DetectionResult processed_result;
+  Detections processed_result;
   processed_result.boxes.reserve(nms_indices.size());
   processed_result.scores.reserve(nms_indices.size());
   processed_result.labels.reserve(nms_indices.size());
@@ -206,7 +206,7 @@ DetectionResult FCOSPostProcessor::postprocess_detections(
   }
 
   // CRITICAL: Transform coordinates from processed image space to original image space
-  DetectionResult final_result = transform_coordinates_to_original(
+  Detections final_result = transform_coordinates_to_original(
     processed_result,
     processed_height,
     processed_width,
@@ -218,8 +218,8 @@ DetectionResult FCOSPostProcessor::postprocess_detections(
   return final_result;
 }
 
-DetectionResult FCOSPostProcessor::transform_coordinates_to_original(
-    const DetectionResult& detections,
+Detections FCOSPostProcessor::transform_coordinates_to_original(
+    const Detections& detections,
     int processed_height,
     int processed_width,
     int original_height,
@@ -229,7 +229,7 @@ DetectionResult FCOSPostProcessor::transform_coordinates_to_original(
   float scale_x = static_cast<float>(original_width) / static_cast<float>(processed_width);
   float scale_y = static_cast<float>(original_height) / static_cast<float>(processed_height);
 
-  DetectionResult transformed_result;
+  Detections transformed_result;
   transformed_result.scores = detections.scores;  // Scores don't change
   transformed_result.labels = detections.labels;  // Labels don't change
   transformed_result.boxes.reserve(detections.boxes.size());
@@ -433,7 +433,7 @@ std::vector<int> FCOSPostProcessor::topk_indices(const std::vector<float>& score
 }
 
 void FCOSPostProcessor::print_detection_results(
-    const DetectionResult& results, int max_detections)
+    const Detections& results, int max_detections)
 {
   std::cout << "\n=== Detection Results ===" << std::endl;
   std::cout << "Total detections: " << results.boxes.size() << std::endl;
@@ -461,7 +461,7 @@ void FCOSPostProcessor::print_detection_results(
 
 void FCOSPostProcessor::plot_detections(
     const std::string& image_path,
-    const DetectionResult& detections,
+    const Detections& detections,
     const std::string& title,
     float confidence_threshold,
     const std::string& output_path)

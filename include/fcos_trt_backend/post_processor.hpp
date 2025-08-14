@@ -3,8 +3,6 @@
 // C++ standard library version: This project uses the C++17 standard library.
 #include <vector>
 #include <string>
-#include <tuple>
-#include <unordered_map>
 
 // OpenCV includes
 #include <opencv2/core.hpp>
@@ -16,7 +14,7 @@
 namespace fcos_trt_backend
 {
 
-struct DetectionResult
+struct Detections
 {
   std::vector<cv::Rect2f> boxes;      // Bounding boxes
   std::vector<float> scores;          // Confidence scores
@@ -40,18 +38,18 @@ public:
     int topk_candidates = 1000);
 
   // Main postprocessing method - now takes original image dimensions
-  DetectionResult postprocess_detections(
+  Detections postprocess_detections(
     const FCOSTrtBackend::HeadOutputs& raw_outputs,
     int original_height,
     int original_width);
 
   // Utility method to print results
-  void print_detection_results(const DetectionResult& results, int max_detections = 20);
+  void print_detection_results(const Detections& results, int max_detections = 20);
 
   // Visualization method to plot detections on image
   void plot_detections(
     const std::string& image_path,
-    const DetectionResult& detections,
+    const Detections& detections,
     const std::string& title,
     float confidence_threshold = 0.5f,
     const std::string& output_path = "detection_results.png");
@@ -81,8 +79,8 @@ private:
   std::vector<int> topk_indices(const std::vector<float>& scores, int k);
 
   // Transform coordinates from processed image space to original image space
-  DetectionResult transform_coordinates_to_original(
-    const DetectionResult& detections,
+  Detections transform_coordinates_to_original(
+    const Detections& detections,
     int processed_height,
     int processed_width,
     int original_height,
