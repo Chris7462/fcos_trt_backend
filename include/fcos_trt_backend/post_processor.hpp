@@ -12,6 +12,7 @@
 // Local includes
 #include "fcos_trt_backend/fcos_trt_backend.hpp"
 
+
 namespace fcos_trt_backend
 {
 
@@ -96,8 +97,5 @@ private:
   const int detections_per_img_;
   const int topk_candidates_;
 };
-
-// COCO class names mapping with correct category IDs (with gaps)
-extern const std::unordered_map<int, std::string> COCO_CATEGORY_NAMES;
 
 } // namespace fcos_trt_backend
