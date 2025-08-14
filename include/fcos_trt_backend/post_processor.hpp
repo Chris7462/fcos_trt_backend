@@ -41,7 +41,7 @@ public:
 
   // Main postprocessing method - now takes original image dimensions
   DetectionResult postprocess_detections(
-    const FCOSTrtBackend::DetectionResults& raw_outputs,
+    const FCOSTrtBackend::HeadOutputs& raw_outputs,
     int original_height,
     int original_width);
 

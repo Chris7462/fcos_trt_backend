@@ -41,7 +41,7 @@ std::string FCOSPostProcessor::get_class_name(int coco_id) const
 }
 
 DetectionResult FCOSPostProcessor::postprocess_detections(
-    const FCOSTrtBackend::DetectionResults& raw_outputs,
+    const FCOSTrtBackend::HeadOutputs& raw_outputs,
     int original_height,
     int original_width)
 {

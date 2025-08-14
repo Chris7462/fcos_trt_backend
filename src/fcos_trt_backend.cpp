@@ -40,6 +40,7 @@ FCOSTrtBackend::FCOSTrtBackend(const std::string & engine_path, const Config & c
     find_tensor_names();
     initialize_memory();
     initialize_streams();
+    warmup_engine();
   } catch (const std::exception & e) {
     cleanup();
     throw TensorRTException("Initialization failed: " + std::string(e.what()));
@@ -246,6 +247,23 @@ void FCOSTrtBackend::initialize_streams()
   }
 }
 
+void FCOSTrtBackend::warmup_engine()
+{
+  CUDA_CHECK(cudaMemsetAsync(buffers_.device_input, 0, input_size_, stream_));
+
+  for (int i = 0; i < config_.warmup_iterations; ++i) {
+    // Run inference pipeline once to initialize CUDA kernels
+    if (!context_->enqueueV3(stream_)) {
+      throw TensorRTException("Failed to enqueue warmup inference");
+    }
+
+    // Synchronize to ensure completion
+    CUDA_CHECK(cudaStreamSynchronize(stream_));
+  }
+
+  std::cout << "Engine warmed up with " << config_.warmup_iterations << " iterations" << std::endl;
+}
+
 void FCOSTrtBackend::cleanup() noexcept
 {
   // Free pinned host memory
@@ -312,7 +330,7 @@ cv::Mat FCOSTrtBackend::preprocess_image(const cv::Mat & image) const
   return processed;
 }
 
-FCOSTrtBackend::DetectionResults FCOSTrtBackend::infer(const cv::Mat & image)
+FCOSTrtBackend::HeadOutputs FCOSTrtBackend::infer(const cv::Mat & image)
 {
   // Preprocess image
   cv::Mat processed_image = preprocess_image(image);
@@ -344,7 +362,7 @@ FCOSTrtBackend::DetectionResults FCOSTrtBackend::infer(const cv::Mat & image)
   CUDA_CHECK(cudaStreamSynchronize(stream_));
 
   // Prepare results
-  DetectionResults results;
+  HeadOutputs results;
 
   // Calculate output sizes
   size_t cls_size = cls_logits_size_ / sizeof(float);
@@ -377,95 +395,6 @@ FCOSTrtBackend::DetectionResults FCOSTrtBackend::infer(const cv::Mat & image)
                         num_anchors_per_level_size_, cudaMemcpyDeviceToHost));
 
   return results;
-}
-
-void FCOSTrtBackend::print_results(const DetectionResults & results)
-{
-  std::cout << "\n=== INFERENCE RESULTS ===" << std::endl;
-
-  std::cout << "\nCLS_LOGITS (first 20 values):" << std::endl;
-  for (int i = 0; i < std::min(20, (int)results.cls_logits.size()); i++) {
-    std::cout << results.cls_logits[i] << " ";
-    if ((i + 1) % 10 == 0) std::cout << std::endl;
-  }
-  if (results.cls_logits.size() > 20) {
-    std::cout << "... (total size: " << results.cls_logits.size() << ")" << std::endl;
-  }
-
-  std::cout << "\nBBOX_REGRESSION (first 20 values):" << std::endl;
-  for (int i = 0; i < std::min(20, (int)results.bbox_regression.size()); i++) {
-    std::cout << results.bbox_regression[i] << " ";
-    if ((i + 1) % 10 == 0) std::cout << std::endl;
-  }
-  if (results.bbox_regression.size() > 20) {
-    std::cout << "... (total size: " << results.bbox_regression.size() << ")" << std::endl;
-  }
-
-  std::cout << "\nBBOX_CTRNESS (first 20 values):" << std::endl;
-  for (int i = 0; i < std::min(20, (int)results.bbox_ctrness.size()); i++) {
-    std::cout << results.bbox_ctrness[i] << " ";
-    if ((i + 1) % 10 == 0) std::cout << std::endl;
-  }
-  if (results.bbox_ctrness.size() > 20) {
-    std::cout << "... (total size: " << results.bbox_ctrness.size() << ")" << std::endl;
-  }
-
-  std::cout << "\nANCHORS (first 20 values):" << std::endl;
-  for (int i = 0; i < std::min(20, (int)results.anchors.size()); i++) {
-    std::cout << results.anchors[i] << " ";
-    if ((i + 1) % 10 == 0) std::cout << std::endl;
-  }
-  if (results.anchors.size() > 20) {
-    std::cout << "... (total size: " << results.anchors.size() << ")" << std::endl;
-  }
-
-  std::cout << "\nIMAGE_SIZES:" << std::endl;
-  for (int i = 0; i < (int)results.image_sizes.size(); i++) {
-    std::cout << results.image_sizes[i] << " ";
-  }
-  std::cout << std::endl;
-
-  std::cout << "\nNUM_ANCHORS_PER_LEVEL:" << std::endl;
-  for (int i = 0; i < (int)results.num_anchors_per_level.size(); i++) {
-    std::cout << results.num_anchors_per_level[i] << " ";
-  }
-  std::cout << std::endl;
-
-  // Print statistics
-  auto calc_stats_float = [](const std::vector<float> & data, const std::string & name) {
-    if (data.empty()) return;
-    float min_val = *std::min_element(data.begin(), data.end());
-    float max_val = *std::max_element(data.begin(), data.end());
-    float sum = std::accumulate(data.begin(), data.end(), 0.0f);
-    float mean = sum / data.size();
-
-    std::cout << "\n" << name << " Statistics:" << std::endl;
-    std::cout << "  Min: " << min_val << std::endl;
-    std::cout << "  Max: " << max_val << std::endl;
-    std::cout << "  Mean: " << mean << std::endl;
-    std::cout << "  Size: " << data.size() << std::endl;
-  };
-
-  auto calc_stats_int64 = [](const std::vector<int64_t> & data, const std::string & name) {
-    if (data.empty()) return;
-    int64_t min_val = *std::min_element(data.begin(), data.end());
-    int64_t max_val = *std::max_element(data.begin(), data.end());
-    long long sum = std::accumulate(data.begin(), data.end(), 0LL);
-    double mean = (double)sum / data.size();
-
-    std::cout << "\n" << name << " Statistics:" << std::endl;
-    std::cout << "  Min: " << min_val << std::endl;
-    std::cout << "  Max: " << max_val << std::endl;
-    std::cout << "  Mean: " << mean << std::endl;
-    std::cout << "  Size: " << data.size() << std::endl;
-  };
-
-  calc_stats_float(results.cls_logits, "CLS_LOGITS");
-  calc_stats_float(results.bbox_regression, "BBOX_REGRESSION");
-  calc_stats_float(results.bbox_ctrness, "BBOX_CTRNESS");
-  calc_stats_float(results.anchors, "ANCHORS");
-  calc_stats_int64(results.image_sizes, "IMAGE_SIZES");
-  calc_stats_int64(results.num_anchors_per_level, "NUM_ANCHORS_PER_LEVEL");
 }
 
 } // namespace fcos_trt_backend

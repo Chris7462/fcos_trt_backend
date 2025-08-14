@@ -47,6 +47,16 @@ public:
     int width;
 
     /**
+     * @brief Number of warmup iterations before timing starts
+     * @details This is used to ensure that the CUDA kernels and GPU resources are properly initialized
+     * and cached before actual inference timing begins. This helps to avoid cold start penalties.
+     * - The first iteration initializes CUDA kernels and allocates any lazy GPU resources.
+     * - The second iteration ensures everything is properly warmed up and gives more consistent timing.
+     * - Set to 0 to disable warmup iterations.
+     */
+    int warmup_iterations;
+
+    /**
      * @brief Log level for TensorRT messages
      * @details This controls the verbosity of TensorRT logging.
      */
@@ -57,11 +67,11 @@ public:
      * @details Initializes the configuration with default values.
      */
     Config()
-    : height(374), width(1238),
+    : height(374), width(1238), warmup_iterations(2),
       log_level(Logger::Severity::kWARNING) {}
   };
 
-  struct DetectionResults
+  struct HeadOutputs
   {
     std::vector<float> cls_logits;
     std::vector<float> bbox_regression;
@@ -85,14 +95,11 @@ public:
 
   // Main inference method
   /**
-   * @brief Run inference on input image and return detection results
+   * @brief Run inference on input image and return head outputs from the model
    * @param image Input image
-   * @return Detection results containing cls_logits, bbox_regression, and bbox_ctrness
+   * @return Head outputs containing cls_logits, bbox_regression, and bbox_ctrness
    */
-  DetectionResults infer(const cv::Mat & image);
-
-  // Utility function to print results
-  void print_results(const DetectionResults & results);
+  HeadOutputs infer(const cv::Mat & image);
 
 private:
   // Initialization methods
@@ -100,6 +107,7 @@ private:
   void find_tensor_names();
   void initialize_memory();
   void initialize_streams();
+  void warmup_engine();
 
   // Memory management
   void cleanup() noexcept;
