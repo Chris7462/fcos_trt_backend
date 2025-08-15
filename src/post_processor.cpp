@@ -41,9 +41,9 @@ std::string FCOSPostProcessor::get_class_name(int coco_id) const
 }
 
 Detections FCOSPostProcessor::postprocess_detections(
-    const FCOSTrtBackend::HeadOutputs& head_outputs,
-    int original_height,
-    int original_width)
+  const FCOSTrtBackend::HeadOutputs& head_outputs,
+  int original_height,
+  int original_width)
 {
   std::cout << "\n=== Starting FCOS Postprocessing ===" << std::endl;
 
@@ -72,11 +72,11 @@ Detections FCOSPostProcessor::postprocess_detections(
 
   // Split tensors by pyramid levels
   auto cls_logits_per_level = split_tensor_by_levels(
-      head_outputs.cls_logits, head_outputs.num_anchors_per_level, num_classes);
+    head_outputs.cls_logits, head_outputs.num_anchors_per_level, num_classes);
   auto bbox_regression_per_level = split_tensor_by_levels(
-      head_outputs.bbox_regression, head_outputs.num_anchors_per_level, 4);
+    head_outputs.bbox_regression, head_outputs.num_anchors_per_level, 4);
   auto bbox_ctrness_per_level = split_tensor_by_levels(
-      head_outputs.bbox_ctrness, head_outputs.num_anchors_per_level, 1);
+    head_outputs.bbox_ctrness, head_outputs.num_anchors_per_level, 1);
 
   // Split anchors by levels
   std::vector<std::vector<float>> anchors_per_level;
@@ -87,9 +87,9 @@ Detections FCOSPostProcessor::postprocess_detections(
     size_t end_idx = (anchor_offset + level_anchors) * 4;
 
     std::vector<float> level_anchor_data(
-        head_outputs.anchors.begin() + start_idx,
-        head_outputs.anchors.begin() + end_idx
-        );
+      head_outputs.anchors.begin() + start_idx,
+      head_outputs.anchors.begin() + end_idx
+    );
     anchors_per_level.push_back(level_anchor_data);
     anchor_offset += level_anchors;
   }
@@ -219,11 +219,11 @@ Detections FCOSPostProcessor::postprocess_detections(
 }
 
 Detections FCOSPostProcessor::transform_coordinates_to_original(
-    const Detections& detections,
-    int processed_height,
-    int processed_width,
-    int original_height,
-    int original_width)
+  const Detections& detections,
+  int processed_height,
+  int processed_width,
+  int original_height,
+  int original_width)
 {
   // Calculate scale factors
   float scale_x = static_cast<float>(original_width) / static_cast<float>(processed_width);
@@ -253,9 +253,9 @@ Detections FCOSPostProcessor::transform_coordinates_to_original(
 }
 
 std::vector<std::vector<float>> FCOSPostProcessor::split_tensor_by_levels(
-    const std::vector<float>& tensor,
-    const std::vector<int64_t>& num_anchors_per_level,
-    int tensor_dim)
+  const std::vector<float>& tensor,
+  const std::vector<int64_t>& num_anchors_per_level,
+  int tensor_dim)
 {
   std::vector<std::vector<float>> split_tensors;
   size_t offset = 0;
@@ -263,9 +263,9 @@ std::vector<std::vector<float>> FCOSPostProcessor::split_tensor_by_levels(
   for (int64_t level_anchors : num_anchors_per_level) {
     size_t level_size = level_anchors * tensor_dim;
     std::vector<float> level_tensor(
-        tensor.begin() + offset,
-        tensor.begin() + offset + level_size
-        );
+      tensor.begin() + offset,
+      tensor.begin() + offset + level_size
+    );
     split_tensors.push_back(level_tensor);
     offset += level_size;
   }
@@ -274,10 +274,10 @@ std::vector<std::vector<float>> FCOSPostProcessor::split_tensor_by_levels(
 }
 
 std::vector<int> FCOSPostProcessor::apply_nms(
-    const std::vector<cv::Rect2f>& boxes,
-    const std::vector<float>& scores,
-    const std::vector<int>& labels,
-    float nms_threshold)
+  const std::vector<cv::Rect2f>& boxes,
+  const std::vector<float>& scores,
+  const std::vector<int>& labels,
+  float nms_threshold)
 {
   if (boxes.empty()) {
     return {};
@@ -310,11 +310,11 @@ std::vector<int> FCOSPostProcessor::apply_nms(
     for (int idx : indices) {
       // Convert cv::Rect2f to cv::Rect for OpenCV compatibility
       cv::Rect int_box(
-          static_cast<int>(boxes[idx].x),
-          static_cast<int>(boxes[idx].y),
-          static_cast<int>(boxes[idx].width),
-          static_cast<int>(boxes[idx].height)
-          );
+        static_cast<int>(boxes[idx].x),
+        static_cast<int>(boxes[idx].y),
+        static_cast<int>(boxes[idx].width),
+        static_cast<int>(boxes[idx].height)
+        );
       class_boxes.push_back(int_box);
       class_scores.push_back(scores[idx]);
     }
@@ -337,26 +337,26 @@ std::vector<int> FCOSPostProcessor::apply_nms(
 
   // Sort by score (descending)
   std::sort(final_indices.begin(), final_indices.end(),
-      [&scores](int a, int b) {
+    [&scores](int a, int b) {
       return scores[a] > scores[b];
-      });
+    });
 
   return final_indices;
 }
 
 std::vector<int> FCOSPostProcessor::apply_greedy_nms(
-    const std::vector<cv::Rect>& boxes,
-    const std::vector<float>& scores,
-    float nms_threshold)
+  const std::vector<cv::Rect>& boxes,
+  const std::vector<float>& scores,
+  float nms_threshold)
 {
   std::vector<int> indices(boxes.size());
   std::iota(indices.begin(), indices.end(), 0);
 
   // Sort by score (descending)
   std::sort(indices.begin(), indices.end(),
-      [&scores](int a, int b) {
+    [&scores](int a, int b) {
       return scores[a] > scores[b];
-      });
+    });
 
   std::vector<bool> suppressed(boxes.size(), false);
   std::vector<int> keep;
@@ -406,7 +406,7 @@ float FCOSPostProcessor::compute_iou(const cv::Rect& box1, const cv::Rect& box2)
 }
 
 cv::Rect2f FCOSPostProcessor::clip_box_to_image(
-    const cv::Rect2f& box, int image_height, int image_width)
+  const cv::Rect2f& box, int image_height, int image_width)
 {
   float x1 = std::max(0.0f, box.x);
   float y1 = std::max(0.0f, box.y);
@@ -424,16 +424,16 @@ std::vector<int> FCOSPostProcessor::topk_indices(const std::vector<float>& score
   // Partial sort to get top-k
   int actual_k = std::min(k, static_cast<int>(scores.size()));
   std::partial_sort(indices.begin(), indices.begin() + actual_k, indices.end(),
-      [&scores](int a, int b) {
+    [&scores](int a, int b) {
       return scores[a] > scores[b];
-      });
+    });
 
   indices.resize(actual_k);
   return indices;
 }
 
 void FCOSPostProcessor::print_detection_results(
-    const Detections& results, int max_detections)
+  const Detections& results, int max_detections)
 {
   std::cout << "\n=== Detection Results ===" << std::endl;
   std::cout << "Total detections: " << results.boxes.size() << std::endl;
@@ -460,11 +460,11 @@ void FCOSPostProcessor::print_detection_results(
 }
 
 void FCOSPostProcessor::plot_detections(
-    const std::string& image_path,
-    const Detections& detections,
-    const std::string& title,
-    float confidence_threshold,
-    const std::string& output_path)
+  const std::string& image_path,
+  const Detections& detections,
+  const std::string& title,
+  float confidence_threshold,
+  const std::string& output_path)
 {
   try {
     // Load image
@@ -491,8 +491,7 @@ void FCOSPostProcessor::plot_detections(
         int y2 = static_cast<int>(box.y + box.height);
 
         // Draw bounding box in green
-        cv::rectangle(image_for_plot, cv::Point(x1, y1), cv::Point(x2, y2),
-                     cv::Scalar(0, 255, 0), 2);
+        cv::rectangle(image_for_plot, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 255, 0), 2);
 
         // Get class name
         int label_id = detections.labels[i];
@@ -505,17 +504,17 @@ void FCOSPostProcessor::plot_detections(
         // Calculate text size for background rectangle
         int baseline = 0;
         cv::Size text_size = cv::getTextSize(label_text, cv::FONT_HERSHEY_SIMPLEX,
-                                           0.6, 2, &baseline);
+          0.6, 2, &baseline);
 
         // Draw background rectangle for text
         cv::rectangle(image_for_plot,
-                     cv::Point(x1, y1 - text_size.height - 10),
-                     cv::Point(x1 + text_size.width, y1),
-                     cv::Scalar(0, 255, 0), -1);
+          cv::Point(x1, y1 - text_size.height - 10),
+          cv::Point(x1 + text_size.width, y1),
+          cv::Scalar(0, 255, 0), -1);
 
         // Draw text
         cv::putText(image_for_plot, label_text, cv::Point(x1, y1 - 10),
-                   cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 0, 0), 2);
+          cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 0, 0), 2);
 
         std::cout << "Detection " << detection_count << ": " << class_name
                   << " (ID: " << label_id << ") - Confidence: "
