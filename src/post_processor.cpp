@@ -1,16 +1,15 @@
 #include <iostream>
 #include <algorithm>
 #include <cmath>
-#include <numeric>
 
 // OpenCV includes
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
-#include <opencv2/dnn.hpp>
 
 // Local includes
 #include "fcos_trt_backend/post_processor.hpp"
 #include "fcos_trt_backend/exception.hpp"
+#include"fcos_trt_backend/detection_utils.hpp"
 
 
 namespace fcos_trt_backend
@@ -127,7 +126,7 @@ Detections FCOSPostProcessor::postprocess_detections(
       continue;
     }
     // Apply top-k filtering
-    std::vector<int> topk_idx = topk_indices(level_scores, topk_candidates_);
+    std::vector<int> topk_idx = utils::topk_indices(level_scores, topk_candidates_);
 
     // Decode boxes for kept detections
     for (int idx : topk_idx) {
@@ -165,7 +164,7 @@ Detections FCOSPostProcessor::postprocess_detections(
 
       // Clip to processed image boundaries
       cv::Rect2f box(pred_x1, pred_y1, pred_x2 - pred_x1, pred_y2 - pred_y1);
-      box = clip_box_to_image(box, processed_height, processed_width);
+      box = utils::clip_box_to_image(box, processed_height, processed_width);
       all_boxes.push_back(box);
       all_scores.push_back(level_scores[idx]);
       all_labels.push_back(level_labels[idx]); // COCO category ID
@@ -175,7 +174,7 @@ Detections FCOSPostProcessor::postprocess_detections(
   std::cout << "Collected " << all_boxes.size() << " candidate detections" << std::endl;
 
   // Apply NMS
-  std::vector<int> nms_indices = apply_nms(all_boxes, all_scores, all_labels, nms_thresh_);
+  std::vector<int> nms_indices = utils::apply_nms(all_boxes, all_scores, all_labels, nms_thresh_);
 
   // Limit to max detections per image
   int max_detections = std::min(detections_per_img_, static_cast<int>(nms_indices.size()));
@@ -234,7 +233,7 @@ Detections FCOSPostProcessor::transform_coordinates_to_original(
 
     // Clip to original image boundaries
     cv::Rect2f transformed_box(new_x, new_y, new_width, new_height);
-    transformed_box = clip_box_to_image(transformed_box, original_height, original_width);
+    transformed_box = utils::clip_box_to_image(transformed_box, original_height, original_width);
 
     transformed_result.boxes.push_back(transformed_box);
   }
@@ -261,165 +260,6 @@ std::vector<std::vector<float>> FCOSPostProcessor::split_tensor_by_levels(
   }
 
   return split_tensors;
-}
-
-std::vector<int> FCOSPostProcessor::apply_nms(
-  const std::vector<cv::Rect2f>& boxes,
-  const std::vector<float>& scores,
-  const std::vector<int>& labels,
-  float nms_threshold)
-{
-  if (boxes.empty()) {
-    return {};
-  }
-
-  // Group by class labels for class-wise NMS
-  std::unordered_map<int, std::vector<int>> class_indices;
-  for (size_t i = 0; i < labels.size(); ++i) {
-    class_indices[labels[i]].push_back(i);
-  }
-
-  std::vector<int> final_indices;
-
-  // Apply NMS for each class
-  for (const auto& class_pair : class_indices) {
-    const std::vector<int>& indices = class_pair.second;
-
-    if (indices.size() <= 1) {
-      // No need for NMS if only one box
-      for (int idx : indices) {
-        final_indices.push_back(idx);
-      }
-      continue;
-    }
-
-    // Prepare data for OpenCV NMS - convert to cv::Rect (int) for compatibility
-    std::vector<cv::Rect> class_boxes;
-    std::vector<float> class_scores;
-
-    for (int idx : indices) {
-      // Convert cv::Rect2f to cv::Rect for OpenCV compatibility
-      cv::Rect int_box(
-        static_cast<int>(boxes[idx].x),
-        static_cast<int>(boxes[idx].y),
-        static_cast<int>(boxes[idx].width),
-        static_cast<int>(boxes[idx].height)
-        );
-      class_boxes.push_back(int_box);
-      class_scores.push_back(scores[idx]);
-    }
-
-    // Apply OpenCV NMS with compatible signature
-    std::vector<int> nms_indices;
-    try {
-      cv::dnn::NMSBoxes(class_boxes, class_scores, 0.0f, nms_threshold, nms_indices);
-    } catch (const cv::Exception& e) {
-      // Fallback: implement simple greedy NMS if OpenCV version issues
-      std::cout << "OpenCV NMS failed, using fallback implementation" << std::endl;
-      nms_indices = apply_greedy_nms(class_boxes, class_scores, nms_threshold);
-    }
-
-    // Convert back to original indices
-    for (int nms_idx : nms_indices) {
-      final_indices.push_back(indices[nms_idx]);
-    }
-  }
-
-  // Sort by score (descending)
-  std::sort(final_indices.begin(), final_indices.end(),
-    [&scores](int a, int b) {
-      return scores[a] > scores[b];
-    });
-
-  return final_indices;
-}
-
-std::vector<int> FCOSPostProcessor::apply_greedy_nms(
-  const std::vector<cv::Rect>& boxes,
-  const std::vector<float>& scores,
-  float nms_threshold)
-{
-  std::vector<int> indices(boxes.size());
-  std::iota(indices.begin(), indices.end(), 0);
-
-  // Sort by score (descending)
-  std::sort(indices.begin(), indices.end(),
-    [&scores](int a, int b) {
-      return scores[a] > scores[b];
-    });
-
-  std::vector<bool> suppressed(boxes.size(), false);
-  std::vector<int> keep;
-
-  for (size_t i = 0; i < indices.size(); ++i) {
-    int idx = indices[i];
-    if (suppressed[idx]) {
-      continue;
-    }
-
-    keep.push_back(idx);
-
-    // Suppress overlapping boxes
-    for (size_t j = i + 1; j < indices.size(); ++j) {
-      int next_idx = indices[j];
-      if (suppressed[next_idx]) {
-        continue;
-      }
-
-      float iou = compute_iou(boxes[idx], boxes[next_idx]);
-      if (iou > nms_threshold) {
-        suppressed[next_idx] = true;
-      }
-    }
-  }
-
-  return keep;
-}
-
-float FCOSPostProcessor::compute_iou(const cv::Rect& box1, const cv::Rect& box2)
-{
-  int x1 = std::max(box1.x, box2.x);
-  int y1 = std::max(box1.y, box2.y);
-  int x2 = std::min(box1.x + box1.width, box2.x + box2.width);
-  int y2 = std::min(box1.y + box1.height, box2.y + box2.height);
-
-  if (x2 <= x1 || y2 <= y1) {
-    return 0.0f;
-  }
-
-  float intersection = (x2 - x1) * (y2 - y1);
-  float area1 = box1.width * box1.height;
-  float area2 = box2.width * box2.height;
-  float union_area = area1 + area2 - intersection;
-
-  return intersection / union_area;
-}
-
-cv::Rect2f FCOSPostProcessor::clip_box_to_image(
-  const cv::Rect2f& box, int image_height, int image_width)
-{
-  float x1 = std::max(0.0f, box.x);
-  float y1 = std::max(0.0f, box.y);
-  float x2 = std::min(static_cast<float>(image_width), box.x + box.width);
-  float y2 = std::min(static_cast<float>(image_height), box.y + box.height);
-
-  return cv::Rect2f(x1, y1, x2 - x1, y2 - y1);
-}
-
-std::vector<int> FCOSPostProcessor::topk_indices(const std::vector<float>& scores, int k)
-{
-  std::vector<int> indices(scores.size());
-  std::iota(indices.begin(), indices.end(), 0);
-
-  // Partial sort to get top-k
-  int actual_k = std::min(k, static_cast<int>(scores.size()));
-  std::partial_sort(indices.begin(), indices.begin() + actual_k, indices.end(),
-    [&scores](int a, int b) {
-      return scores[a] > scores[b];
-    });
-
-  indices.resize(actual_k);
-  return indices;
 }
 
 } // namespace fcos_trt_backend
