@@ -25,14 +25,14 @@ std::string get_class_name(int coco_id)
 }
 
 void print_detection_results(
-  const Detections& results, int max_detections)
+  const Detections& results, size_t max_detections)
 {
   std::cout << "\n=== Detection Results ===" << std::endl;
   std::cout << "Total detections: " << results.boxes.size() << std::endl;
 
-  int print_count = std::min(max_detections, static_cast<int>(results.boxes.size()));
+  size_t print_count = std::min(max_detections, results.boxes.size());
 
-  for (int i = 0; i < print_count; ++i) {
+  for (size_t i = 0; i < print_count; ++i) {
     const auto& box = results.boxes[i];
     float score = results.scores[i];
     int coco_id = results.labels[i]; // This is now a COCO category ID

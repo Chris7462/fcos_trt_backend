@@ -43,7 +43,7 @@ const std::unordered_map<int, std::string> COCO_CATEGORY_NAMES = {
 std::string get_class_name(int coco_id);
 
 // Utility method to print results
-void print_detection_results(const Detections& results, int max_detections = 20);
+void print_detection_results(const Detections& results, size_t max_detections = 20);
 
 // Visualization method to plot detections on image
 void plot_detections(
