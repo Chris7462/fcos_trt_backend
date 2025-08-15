@@ -105,11 +105,10 @@ Detections FCOSPostProcessor::postprocess_detections(
     std::vector<size_t> keep_indices;
 
     for (size_t anchor_idx = 0; anchor_idx < level_anchors; ++anchor_idx) {
-      float ctrness_score = 1.0f / (1.0f + std::exp(-bbox_ctrness[anchor_idx])); // sigmoid
+      float ctrness_score = sigmoid(bbox_ctrness[anchor_idx]);
 
       for (size_t class_idx = 0; class_idx < num_classes; ++class_idx) {
-        float cls_score = cls_logits[anchor_idx * num_classes + class_idx];
-        cls_score = 1.0f / (1.0f + std::exp(-cls_score)); // sigmoid
+        float cls_score = sigmoid(cls_logits[anchor_idx * num_classes + class_idx]);
 
         float final_score = std::sqrt(cls_score * ctrness_score);
 
@@ -125,6 +124,7 @@ Detections FCOSPostProcessor::postprocess_detections(
     if (level_scores.empty()) {
       continue;
     }
+
     // Apply top-k filtering
     std::vector<int> topk_idx = utils::topk_indices(level_scores, topk_candidates_);
 

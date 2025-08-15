@@ -59,6 +59,10 @@ private:
     int original_height,
     int original_width);
 
+  static inline float sigmoid(float x) {
+    return 1.0f / (1.0f + std::exp(-x));
+  }
+
 private:
   const float score_thresh_;
   const float nms_thresh_;
