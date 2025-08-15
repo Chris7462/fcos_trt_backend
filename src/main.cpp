@@ -5,9 +5,11 @@
 #include <opencv2/opencv.hpp>
 
 // Local includes
-#include "fcos_trt_backend/fcos_trt_backend.hpp"
-#include "fcos_trt_backend/post_processor.hpp"
+#include "fcos_trt_backend/fcos_backbone.hpp"
+#include "fcos_trt_backend/fcos_post_processor.hpp"
 #include "fcos_trt_backend/exception.hpp"
+#include "fcos_trt_backend/detection_utils.hpp"
+
 
 int main(int argc, char* argv[])
 {
@@ -33,38 +35,37 @@ int main(int argc, char* argv[])
     int original_width = image.cols;
 
     // Initialize TensorRT backend
-    fcos_trt_backend::FCOSTrtBackend::Config config;
+    fcos_trt_backend::FCOSBackbone::Config config;
     // Use default config values (374x1238)
 
-    fcos_trt_backend::FCOSTrtBackend backend(engine_path, config);
+    fcos_trt_backend::FCOSBackbone backbone(engine_path, config);
 
     // Initialize postprocessor
-    fcos_trt_backend::FCOSPostProcessor::Config post_config;
-    post_config.score_thresh = 0.2f;
-    post_config.nms_thresh = 0.6f;
-    post_config.detections_per_img = 100;
-    post_config.topk_candidates = 1000;
+    const float score_thresh = 0.2f;
+    const float nms_thresh = 0.6f;
+    const int detections_per_img = 100;
+    const int topk_candidates = 1000;
 
-    fcos_trt_backend::FCOSPostProcessor postprocessor(post_config);
+    fcos_trt_backend::FCOSPostProcessor postprocessor(score_thresh, nms_thresh, detections_per_img, topk_candidates);
 
     // Run inference
-    auto raw_outputs = backend.infer(image);
+    auto head_outputs = backbone.infer(image);
 
     // Print raw inference results
-    //backend.print_results(raw_outputs);
+    //backend.print_results(head_outputs);
 
     // Run postprocessing with original image dimensions
     auto detection_results = postprocessor.postprocess_detections(
-      raw_outputs,
+      head_outputs,
       original_height,
       original_width
     );
 
     // Print postprocessed results
-    //postprocessor.print_detection_results(detection_results, 20);
+    //fcos_trt_backend::utils::print_detection_results(detection_results, 20);
 
     // Create visualization of the detection results
-    postprocessor.plot_detections(
+    fcos_trt_backend::utils::plot_detections(
       image_path,
       detection_results,
       "FCOS TensorRT Detection Results",

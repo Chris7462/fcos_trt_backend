@@ -43,8 +43,9 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ModelGeneration.cmake)
 
 # Define the library target
 add_executable(fcos_trt_backend
-  src/fcos_trt_backend.cpp
-  src/post_processor.cpp
+  src/detection_utils.cpp
+  src/fcos_backbone.cpp
+  src/fcos_post_processor.cpp
   src/main.cpp)
 
 # Add model generation dependency to the library

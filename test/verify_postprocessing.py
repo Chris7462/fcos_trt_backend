@@ -54,7 +54,7 @@ class FCOSBackbone(Module):
         # Calculate num_anchors_per_level for consistency with original forward
         num_anchors_per_level = [x.size(2) * x.size(3) for x in features_list]
 
-        # Return raw outputs without NMS post-processing
+        # Return head outputs without NMS post-processing
         return {
             'cls_logits': head_outputs['cls_logits'],
             'bbox_regression': head_outputs['bbox_regression'],
@@ -437,21 +437,21 @@ def run_inference_comparison(image_path, confidence_threshold=0.5, tolerance=1e-
 
     with torch.no_grad():
         # Get raw outputs from backbone
-        raw_outputs = backbone_model(test_images)
+        head_outputs = backbone_model(test_images)
 
         print("Raw outputs from FCOSBackbone:")
-        print_tensor_stats(raw_outputs['cls_logits'], "CLS_LOGITS")
-        print_tensor_stats(raw_outputs['bbox_regression'], "BBOX_REGRESSION")
-        print_tensor_stats(raw_outputs['bbox_ctrness'], "BBOX_CTRNESS")
+        print_tensor_stats(head_outputs['cls_logits'], "CLS_LOGITS")
+        print_tensor_stats(head_outputs['bbox_regression'], "BBOX_REGRESSION")
+        print_tensor_stats(head_outputs['bbox_ctrness'], "BBOX_CTRNESS")
 
         # Apply post-processing
         custom_results = post_processor.postprocess_detections(
-            cls_logits=raw_outputs['cls_logits'],
-            bbox_regression=raw_outputs['bbox_regression'],
-            bbox_ctrness=raw_outputs['bbox_ctrness'],
-            anchors=raw_outputs['anchors'],
-            image_sizes=raw_outputs['image_sizes'],
-            num_anchors_per_level=raw_outputs['num_anchors_per_level']
+            cls_logits=head_outputs['cls_logits'],
+            bbox_regression=head_outputs['bbox_regression'],
+            bbox_ctrness=head_outputs['bbox_ctrness'],
+            anchors=head_outputs['anchors'],
+            image_sizes=head_outputs['image_sizes'],
+            num_anchors_per_level=head_outputs['num_anchors_per_level']
         )
 
         # Get original image sizes for transform.postprocess
@@ -461,7 +461,7 @@ def run_inference_comparison(image_path, confidence_threshold=0.5, tolerance=1e-
             original_image_sizes.append((val[0], val[1]))
 
         # Create image_sizes list from tensor
-        image_sizes_list = [tuple(raw_outputs['image_sizes'].tolist())]
+        image_sizes_list = [tuple(head_outputs['image_sizes'].tolist())]
 
         # CRITICAL: Apply transform postprocess to get final coordinates
         custom_results = original_model.transform.postprocess(
