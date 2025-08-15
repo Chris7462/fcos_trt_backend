@@ -42,11 +42,16 @@ endif()
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ModelGeneration.cmake)
 
 # Define the library target
-add_executable(fcos_trt_backend
+add_library(fcos_trt_backend
   src/detection_utils.cpp
   src/fcos_backbone.cpp
-  src/fcos_post_processor.cpp
-  src/main.cpp)
+  src/fcos_post_processor.cpp)
+
+# add_executable(fcos_trt_backend
+#   src/detection_utils.cpp
+#   src/fcos_backbone.cpp
+#   src/fcos_post_processor.cpp
+#   src/main.cpp)
 
 # Add model generation dependency to the library
 add_model_generation_dependency(fcos_trt_backend)
@@ -134,26 +139,26 @@ if(BUILD_TESTING)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 
-# find_package(ament_cmake_gtest REQUIRED)
+  find_package(ament_cmake_gtest REQUIRED)
 
-# # Include engine symbolic link setup
-# include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/TestingSetup.cmake)
+  # Include engine symbolic link setup
+  include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/TestingSetup.cmake)
 
-# ament_add_gtest(test_fcos_trt_backend
-#   test/test_fcos_trt_backend.cpp)
+  ament_add_gtest(test_fcos_trt_backend
+    test/test_fcos_trt_backend.cpp)
 
-# # Add OpenCV includes for the test
-# target_include_directories(test_fcos_trt_backend PRIVATE
-#   ${OpenCV_INCLUDE_DIRS})
+  # Add OpenCV includes for the test
+  target_include_directories(test_fcos_trt_backend PRIVATE
+    ${OpenCV_INCLUDE_DIRS})
 
-# # Use plain signature to match ament_add_gtest's internal calls
-# # Note: gtest_main is automatically linked by ament_add_gtest
-# target_link_libraries(test_fcos_trt_backend
-#   fcos_trt_backend
-#   ${OpenCV_LIBS})
+  # Use plain signature to match ament_add_gtest's internal calls
+  # Note: gtest_main is automatically linked by ament_add_gtest
+  target_link_libraries(test_fcos_trt_backend
+    fcos_trt_backend
+    ${OpenCV_LIBS})
 
-# # Make the test depend on the symbolic link
-# add_testing_dependency(test_fcos_trt_backend)
+  # Make the test depend on the symbolic link
+  add_testing_dependency(test_fcos_trt_backend)
 endif()
 
 ament_package()
