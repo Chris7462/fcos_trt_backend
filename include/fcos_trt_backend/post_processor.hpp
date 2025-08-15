@@ -9,20 +9,15 @@
 
 // Local includes
 #include "fcos_trt_backend/fcos_trt_backend.hpp"
+#include "fcos_trt_backend/detection_types.hpp"
 
 
 namespace fcos_trt_backend
 {
 
-struct Detections
-{
-  std::vector<cv::Rect2f> boxes;      // Bounding boxes
-  std::vector<float> scores;          // Confidence scores
-  std::vector<int> labels;            // Class labels (COCO category IDs)
-};
-
 class FCOSPostProcessor
 {
+
 public:
   /**
    * @brief Post processor for FCOS
@@ -37,22 +32,17 @@ public:
     int detections_per_img = 100,
     int topk_candidates = 1000);
 
-  // Main postprocessing method - now takes original image dimensions
+  /**
+   * @brief Main postprocessing method
+   * @param head_outputs Raw model outputs from FCOSTrtBackend
+   * @param original_height Original image height
+   * @param original_width Original image width
+   * @return Processed detections in original image coordinates
+   */
   Detections postprocess_detections(
     const FCOSTrtBackend::HeadOutputs& head_outputs,
     int original_height,
     int original_width);
-
-  // Utility method to print results
-  void print_detection_results(const Detections& results, int max_detections = 20);
-
-  // Visualization method to plot detections on image
-  void plot_detections(
-    const std::string& image_path,
-    const Detections& detections,
-    const std::string& title,
-    float confidence_threshold = 0.5f,
-    const std::string& output_path = "detection_results.png");
 
 private:
   // Helper methods for postprocessing pipeline
@@ -85,9 +75,6 @@ private:
     int processed_width,
     int original_height,
     int original_width);
-
-  // Get class name from COCO category ID
-  std::string get_class_name(int coco_id) const;
 
 private:
   const float score_thresh_;

@@ -1,10 +1,17 @@
 #pragma once
 
+// C++ standard library version: This project uses the C++17 standard library.
 #include <string>
 #include <unordered_map>
 
+// Local includes
+#include "fcos_trt_backend/detection_types.hpp"
+
 
 namespace fcos_trt_backend
+{
+
+namespace utils
 {
 
 // COCO class names mapping with correct category IDs (with gaps)
@@ -28,5 +35,21 @@ const std::unordered_map<int, std::string> COCO_CATEGORY_NAMES = {
   {84, "book"}, {85, "clock"}, {86, "vase"}, {87, "scissors"}, {88, "teddy bear"},
   {89, "hair drier"}, {90, "toothbrush"}
 };
+
+// Get class name from COCO category ID
+std::string get_class_name(int coco_id);
+
+// Utility method to print results
+void print_detection_results(const Detections& results, int max_detections = 20);
+
+// Visualization method to plot detections on image
+void plot_detections(
+  const std::string& image_path,
+  const Detections& detections,
+  const std::string& title,
+  float confidence_threshold = 0.5f,
+  const std::string& output_path = "detection_results.png");
+
+} // namespace utils
 
 } // namespace fcos_trt_backend

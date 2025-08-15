@@ -8,6 +8,8 @@
 #include "fcos_trt_backend/fcos_trt_backend.hpp"
 #include "fcos_trt_backend/post_processor.hpp"
 #include "fcos_trt_backend/exception.hpp"
+#include "fcos_trt_backend/detection_utils.hpp"
+
 
 int main(int argc, char* argv[])
 {
@@ -63,7 +65,7 @@ int main(int argc, char* argv[])
     //postprocessor.print_detection_results(detection_results, 20);
 
     // Create visualization of the detection results
-    postprocessor.plot_detections(
+    fcos_trt_backend::utils::plot_detections(
       image_path,
       detection_results,
       "FCOS TensorRT Detection Results",
