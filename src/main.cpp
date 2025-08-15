@@ -62,7 +62,7 @@ int main(int argc, char* argv[])
     );
 
     // Print postprocessed results
-    //postprocessor.print_detection_results(detection_results, 20);
+    //fcos_trt_backend::utils::print_detection_results(detection_results, 20);
 
     // Create visualization of the detection results
     fcos_trt_backend::utils::plot_detections(

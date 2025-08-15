@@ -101,6 +101,9 @@ public:
    */
   HeadOutputs infer(const cv::Mat & image);
 
+  // Utility function to print results
+  //void print_results(const HeadOutputs & results);
+
 private:
   // Initialization methods
   void initialize_engine(const std::string & engine_path);

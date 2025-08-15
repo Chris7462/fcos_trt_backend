@@ -164,7 +164,6 @@ Detections FCOSPostProcessor::postprocess_detections(
 
       // Clip to processed image boundaries
       cv::Rect2f box(pred_x1, pred_y1, pred_x2 - pred_x1, pred_y2 - pred_y1);
-      box = utils::clip_box_to_image(box, processed_height, processed_width);
       all_boxes.push_back(box);
       all_scores.push_back(level_scores[idx]);
       all_labels.push_back(level_labels[idx]); // COCO category ID
