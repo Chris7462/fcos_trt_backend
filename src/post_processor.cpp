@@ -22,11 +22,11 @@ FCOSPostProcessor::FCOSPostProcessor(const float score_thresh,
 : score_thresh_(score_thresh), nms_thresh_(nms_thresh),
   detections_per_img_(detections_per_img), topk_candidates_(topk_candidates)
 {
-  std::cout << "FCOSPostProcessor initialized with:" << std::endl;
-  std::cout << "  Score threshold: " << score_thresh_ << std::endl;
-  std::cout << "  NMS threshold: " << nms_thresh_ << std::endl;
-  std::cout << "  Detections per image: " << detections_per_img_ << std::endl;
-  std::cout << "  Top-k candidates: " << topk_candidates_ << std::endl;
+  //std::cout << "FCOSPostProcessor initialized with:" << std::endl;
+  //std::cout << "  Score threshold: " << score_thresh_ << std::endl;
+  //std::cout << "  NMS threshold: " << nms_thresh_ << std::endl;
+  //std::cout << "  Detections per image: " << detections_per_img_ << std::endl;
+  //std::cout << "  Top-k candidates: " << topk_candidates_ << std::endl;
 }
 
 Detections FCOSPostProcessor::postprocess_detections(
@@ -34,7 +34,7 @@ Detections FCOSPostProcessor::postprocess_detections(
   int original_height,
   int original_width)
 {
-  std::cout << "\n=== Starting FCOS Postprocessing ===" << std::endl;
+  //std::cout << "\n=== Starting FCOS Postprocessing ===" << std::endl;
 
   // Extract image dimensions from image_sizes (these are the processed dimensions)
   if (head_outputs.image_sizes.size() != 2) {
@@ -43,21 +43,21 @@ Detections FCOSPostProcessor::postprocess_detections(
   int processed_height = static_cast<int>(head_outputs.image_sizes[0]);
   int processed_width = static_cast<int>(head_outputs.image_sizes[1]);
 
-  std::cout << "Processed image dimensions: " << processed_height << "x" << processed_width << std::endl;
-  std::cout << "Original image dimensions: " << original_height << "x" << original_width << std::endl;
+  //std::cout << "Processed image dimensions: " << processed_height << "x" << processed_width << std::endl;
+  //std::cout << "Original image dimensions: " << original_height << "x" << original_width << std::endl;
 
   // Get number of classes from cls_logits shape
   // Assuming cls_logits is flattened: [total_anchors * num_classes]
   size_t total_anchors = head_outputs.anchors.size() / 4;  // 4 coords per anchor
   size_t num_classes = head_outputs.cls_logits.size() / total_anchors;
 
-  std::cout << "Total anchors: " << total_anchors << std::endl;
-  std::cout << "Number of classes: " << num_classes << std::endl;
+  //std::cout << "Total anchors: " << total_anchors << std::endl;
+  //std::cout << "Number of classes: " << num_classes << std::endl;
 
   // Verify that we have the expected 91 classes for COCO
-  if (num_classes != 91) {
-    std::cout << "Warning: Expected 91 classes for COCO, but got " << num_classes << std::endl;
-  }
+  //if (num_classes != 91) {
+  //  std::cout << "Warning: Expected 91 classes for COCO, but got " << num_classes << std::endl;
+  //}
 
   // Split tensors by pyramid levels
   auto cls_logits_per_level = split_tensor_by_levels(
@@ -83,7 +83,7 @@ Detections FCOSPostProcessor::postprocess_detections(
     anchor_offset += level_anchors;
   }
 
-  std::cout << "Split tensors into " << cls_logits_per_level.size() << " pyramid levels" << std::endl;
+  //std::cout << "Split tensors into " << cls_logits_per_level.size() << " pyramid levels" << std::endl;
 
   // Collect detections from all levels
   std::vector<cv::Rect2f> all_boxes;
@@ -171,7 +171,7 @@ Detections FCOSPostProcessor::postprocess_detections(
     }
   }
 
-  std::cout << "Collected " << all_boxes.size() << " candidate detections" << std::endl;
+  //std::cout << "Collected " << all_boxes.size() << " candidate detections" << std::endl;
 
   // Apply NMS
   std::vector<int> nms_indices = utils::apply_nms(all_boxes, all_scores, all_labels, nms_thresh_);
@@ -180,7 +180,7 @@ Detections FCOSPostProcessor::postprocess_detections(
   int max_detections = std::min(detections_per_img_, static_cast<int>(nms_indices.size()));
   nms_indices.resize(max_detections);
 
-  std::cout << "After NMS: " << nms_indices.size() << " final detections" << std::endl;
+  //std::cout << "After NMS: " << nms_indices.size() << " final detections" << std::endl;
 
   // Prepare intermediate results (still in processed image coordinates)
   Detections processed_result;
@@ -203,7 +203,7 @@ Detections FCOSPostProcessor::postprocess_detections(
     original_width
   );
 
-  std::cout << "Postprocessing completed successfully!" << std::endl;
+  //std::cout << "Postprocessing completed successfully!" << std::endl;
   return final_result;
 }
 
