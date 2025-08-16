@@ -28,10 +28,23 @@ protected:
     // Configure the inferencer
     fcos_trt_backend::FCOSBackbone::Config config;
 
+    // Initialize postprocessor
+    const float score_thresh = 0.2f;
+    const float nms_thresh = 0.6f;
+    const int detections_per_img = 100;
+    const int topk_candidates = 1000;
+
     try {
-      detector = std::make_unique<fcos_trt_backend::FCOSBackbone>(engine_path_, config);
+      backbone = std::make_unique<fcos_trt_backend::FCOSBackbone>(engine_path_, config);
     } catch (const std::exception & e) {
-      GTEST_SKIP() << "Failed to initialize TensorRT inferencer: " << e.what();
+      GTEST_SKIP() << "Failed to initialize backbone: " << e.what();
+    }
+
+    try {
+      postprocessor = std::make_unique<fcos_trt_backend::FCOSPostProcessor>(
+        score_thresh, nms_thresh, detections_per_img, topk_candidates);
+    } catch (const std::exception & e) {
+      GTEST_SKIP() << "Failed to initialize postprocessor: " << e.what();
     }
   }
 
@@ -39,69 +52,61 @@ protected:
   {
   }
 
-  cv::Mat load_test_image()
+  cv::Mat load_test_image(std::string image_path)
   {
-    cv::Mat image = cv::imread(image_path_);
+    cv::Mat image = cv::imread(image_path);
     if (image.empty()) {
-      throw std::runtime_error("Failed to load test image: " + image_path_);
+      throw std::runtime_error("Failed to load test image: " + image_path);
     }
     return image;
   }
 
-  void save_results(
-    const cv::Mat & original, const cv::Mat & segmentation,
-    const cv::Mat & overlay, const std::string & suffix = "")
-  {
-    cv::imwrite("test_output_original" + suffix + ".png", original);
-    cv::imwrite("test_output_segmentation" + suffix + ".png", segmentation);
-    cv::imwrite("test_output_overlay" + suffix + ".png", overlay);
-  }
-
-  std::shared_ptr<fcos_trt_backend::FCOSBackbone> detector;
-
-public:
-  const int input_width_ = 1238;
-  const int input_height_ = 374;
-  const int num_classes_ = 21;
+  std::shared_ptr<fcos_trt_backend::FCOSBackbone> backbone;
+  std::shared_ptr<fcos_trt_backend::FCOSPostProcessor> postprocessor;
 
 private:
-  const std::string engine_path_ = "fcn_resnet101_374x1238.engine";
-  const std::string image_path_ = "image_000.png";
+  const std::string engine_path_ = "fcos_resnet50_fpn_374x1238.engine";
 };
 
-//TEST_F(FCNTrtBackendTest, TestBasicInference)
-//{
-//  cv::Mat image = load_test_image();
-//  EXPECT_EQ(image.cols, 1238);
-//  EXPECT_EQ(image.rows, 374);
-//  EXPECT_EQ(image.type(), CV_8UC3);
 
-//  auto start = std::chrono::high_resolution_clock::now();
-//  cv::Mat segmentation = segmentor->infer(image);
-//  auto end = std::chrono::high_resolution_clock::now();
+TEST_F(FCOSTrtBackendTest, TestBasicInference)
+{
+  const std::string image_path = "image_001.png";
+  cv::Mat image = load_test_image(image_path);
 
-//  auto duration = std::chrono::duration<double, std::milli>(end - start);
-//  std::cout << "GPU infer with decode: " << duration.count() << " ms" << std::endl;
+  int original_height = image.rows;
+  int original_width = image.cols;
 
-//  // Validate output
-//  EXPECT_EQ(segmentation.rows, segmentor->config_.height);
-//  EXPECT_EQ(segmentation.cols, segmentor->config_.width);
-//  EXPECT_EQ(segmentation.type(), CV_8UC3);
+  EXPECT_EQ(image.cols, 1238);
+  EXPECT_EQ(image.rows, 374);
+  EXPECT_EQ(image.type(), CV_8UC3);
 
-//  // Create overlay
-//  cv::Mat overlay = fcn_trt_backend::utils::create_overlay(image, segmentation, 0.5f);
-//  EXPECT_EQ(overlay.size(), image.size());
-//  EXPECT_EQ(overlay.type(), CV_8UC3);
+  auto start1 = std::chrono::high_resolution_clock::now();
+  auto head_outputs = backbone->infer(image);
+  auto end1 = std::chrono::high_resolution_clock::now();
+  auto duration1 = std::chrono::duration<double, std::milli>(end1 - start1);
+  std::cout << "Backbone infer time: " << duration1.count() << " ms" << std::endl;
 
-//  // Save results for visual inspection
-//  save_results(image, segmentation, overlay, "_gpu_optimized");
+  auto start2 = std::chrono::high_resolution_clock::now();
+  auto detection_results = postprocessor->postprocess_detections(
+    head_outputs,
+    original_height,
+    original_width
+  );
+  auto end2 = std::chrono::high_resolution_clock::now();
+  auto duration2 = std::chrono::duration<double, std::milli>(end2 - start2);
+  std::cout << "PostProcessing time: " << duration2.count() << " ms" << std::endl;
 
-//  // Optional: Display results (comment out for automated testing)
-//  /*
-//  cv::imshow("Original", image);
-//  cv::imshow("Segmentation", segmentation);
-//  cv::imshow("Overlay", overlay);
-//  cv::waitKey(0);
-//  cv::destroyAllWindows();
-//  */
-//}
+  fcos_trt_backend::utils::plot_detections(
+    image_path,
+    detection_results,
+    0.5f,  // confidence threshold
+    "fcos_trt_detections.png"
+  );
+
+  fcos_trt_backend::utils::print_detection_results(detection_results, 9);
+  // Validate output
+  //EXPECT_EQ(segmentation.rows, segmentor->config_.height);
+  //EXPECT_EQ(segmentation.cols, segmentor->config_.width);
+  //EXPECT_EQ(segmentation.type(), CV_8UC3);
+}

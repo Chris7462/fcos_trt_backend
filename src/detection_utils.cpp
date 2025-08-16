@@ -54,7 +54,6 @@ void print_detection_results(
 void plot_detections(
   const std::string& image_path,
   const Detections& detections,
-  const std::string& title,
   float confidence_threshold,
   const std::string& output_path)
 {
@@ -67,8 +66,6 @@ void plot_detections(
     }
 
     cv::Mat image_for_plot = image.clone();
-
-    std::cout << "\n=== " << title << " ===" << std::endl;
     int detection_count = 0;
 
     // Draw predictions with confidence > threshold
@@ -96,32 +93,19 @@ void plot_detections(
         // Calculate text size for background rectangle
         int baseline = 0;
         cv::Size text_size = cv::getTextSize(label_text, cv::FONT_HERSHEY_SIMPLEX,
-          0.6, 2, &baseline);
+          0.55, 1.8, &baseline);
 
         // Draw background rectangle for text
         cv::rectangle(image_for_plot,
-          cv::Point(x1, y1 - text_size.height - 10),
+          cv::Point(x1, y1 - text_size.height - 4),
           cv::Point(x1 + text_size.width, y1),
           cv::Scalar(0, 255, 0), -1);
 
         // Draw text
-        cv::putText(image_for_plot, label_text, cv::Point(x1, y1 - 10),
-          cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 0, 0), 2);
-
-        std::cout << "Detection " << detection_count << ": " << class_name
-                  << " (ID: " << label_id << ") - Confidence: "
-                  << detections.scores[i] << std::endl;
-        std::cout << "  Box: [" << x1 << ", " << y1 << ", " << x2 << ", " << y2 << "]"
-                  << std::endl;
+        cv::putText(image_for_plot, label_text, cv::Point(x1, y1 - 4),
+          cv::FONT_HERSHEY_SIMPLEX, 0.55, cv::Scalar(0, 0, 0), 1.8);
       }
     }
-
-    std::cout << "Total detections above " << confidence_threshold
-              << " confidence: " << detection_count << std::endl;
-
-    // Add title to the image
-    cv::putText(image_for_plot, title, cv::Point(30, 50),
-               cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(0, 0, 255), 2);
 
     // Save the result
     if (cv::imwrite(output_path, image_for_plot)) {

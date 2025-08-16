@@ -47,12 +47,6 @@ add_library(fcos_trt_backend
   src/fcos_backbone.cpp
   src/fcos_post_processor.cpp)
 
-# add_executable(fcos_trt_backend
-#   src/detection_utils.cpp
-#   src/fcos_backbone.cpp
-#   src/fcos_post_processor.cpp
-#   src/main.cpp)
-
 # Add model generation dependency to the library
 add_model_generation_dependency(fcos_trt_backend)
 

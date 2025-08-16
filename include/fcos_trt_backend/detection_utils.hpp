@@ -49,7 +49,6 @@ void print_detection_results(const Detections& results, size_t max_detections = 
 void plot_detections(
   const std::string& image_path,
   const Detections& detections,
-  const std::string& title,
   float confidence_threshold = 0.5f,
   const std::string& output_path = "detection_results.png");
 
