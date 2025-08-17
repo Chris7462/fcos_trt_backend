@@ -17,20 +17,40 @@ namespace fcos_trt_backend
 
 class FCOSPostProcessor
 {
-
 public:
-  /**
-   * @brief Post processor for FCOS
-   * @param score_thresh Score threshold for filtering
-   * @param nms_thresh NMS threshold
-   * @param detections_per_img Maximum detections per image
-   * @param topk_candidates Top-k candidates before NMS
-   * @details Constructor with default valuse
-   */
-  explicit FCOSPostProcessor(const float score_thresh = 0.2f,
-    const float nms_thresh = 0.6f,
-    int detections_per_img = 100,
-    int topk_candidates = 1000);
+  struct Config
+  {
+    /**
+     * @brief Score threshold for filtering
+     */
+    float score_thresh;
+
+    /**
+     * @brief NMS threshold
+     */
+    float nms_thresh;
+
+    /**
+     * @brief Maximum detections per image
+     */
+    int detections_per_img;
+
+    /**
+     * @brief Top-k candidates before NMS
+     */
+    int topk_candidates;
+
+    /**
+     * @brief Default constructor
+     * @details Initializes the configuration with default values.
+     */
+    Config()
+    : score_thresh(0.2f), nms_thresh(0.6f), detections_per_img(100),
+      topk_candidates(1000) {}
+  };
+
+  // Constructor with configuration
+  explicit FCOSPostProcessor(const Config & confog = Config());
 
   /**
    * @brief Main postprocessing method
@@ -45,6 +65,9 @@ public:
     int original_width);
 
 private:
+  // Configuration
+  Config config_;
+
   // Helper methods for postprocessing pipeline
   std::vector<std::vector<float>> split_tensor_by_levels(
     const std::vector<float>& tensor,
@@ -62,12 +85,6 @@ private:
   static inline float sigmoid(float x) {
     return 1.0f / (1.0f + std::exp(-x));
   }
-
-private:
-  const float score_thresh_;
-  const float nms_thresh_;
-  const int detections_per_img_;
-  const int topk_candidates_;
 };
 
 } // namespace fcos_trt_backend

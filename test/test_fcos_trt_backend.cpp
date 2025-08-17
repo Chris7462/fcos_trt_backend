@@ -26,23 +26,17 @@ protected:
   void SetUp() override
   {
     // Configure the inferencer
-    fcos_trt_backend::FCOSBackbone::Config config;
-
-    // Initialize postprocessor
-    const float score_thresh = 0.2f;
-    const float nms_thresh = 0.6f;
-    const int detections_per_img = 100;
-    const int topk_candidates = 1000;
+    fcos_trt_backend::FCOSBackbone::Config backbone_config;
+    fcos_trt_backend::FCOSPostProcessor::Config postprocessor_config;
 
     try {
-      backbone = std::make_unique<fcos_trt_backend::FCOSBackbone>(engine_path_, config);
+      backbone = std::make_unique<fcos_trt_backend::FCOSBackbone>(engine_path_, backbone_config);
     } catch (const std::exception & e) {
       GTEST_SKIP() << "Failed to initialize backbone: " << e.what();
     }
 
     try {
-      postprocessor = std::make_unique<fcos_trt_backend::FCOSPostProcessor>(
-        score_thresh, nms_thresh, detections_per_img, topk_candidates);
+      postprocessor = std::make_unique<fcos_trt_backend::FCOSPostProcessor>(postprocessor_config);
     } catch (const std::exception & e) {
       GTEST_SKIP() << "Failed to initialize postprocessor: " << e.what();
     }
@@ -71,7 +65,7 @@ private:
 
 TEST_F(FCOSTrtBackendTest, TestBasicInference)
 {
-  const std::string image_path = "image_001.png";
+  const std::string image_path = "image_000.png";
   cv::Mat image = load_test_image(image_path);
 
   int original_height = image.rows;

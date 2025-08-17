@@ -15,22 +15,13 @@
 namespace fcos_trt_backend
 {
 
-FCOSPostProcessor::FCOSPostProcessor(const float score_thresh,
-  const float nms_thresh,
-  const int detections_per_img,
-  const int topk_candidates)
-: score_thresh_(score_thresh), nms_thresh_(nms_thresh),
-  detections_per_img_(detections_per_img), topk_candidates_(topk_candidates)
+FCOSPostProcessor::FCOSPostProcessor(const Config & config)
+: config_(config)
 {
-  //std::cout << "FCOSPostProcessor initialized with:" << std::endl;
-  //std::cout << "  Score threshold: " << score_thresh_ << std::endl;
-  //std::cout << "  NMS threshold: " << nms_thresh_ << std::endl;
-  //std::cout << "  Detections per image: " << detections_per_img_ << std::endl;
-  //std::cout << "  Top-k candidates: " << topk_candidates_ << std::endl;
 }
 
 Detections FCOSPostProcessor::postprocess_detections(
-  const HeadOutputs& head_outputs,
+  const HeadOutputs & head_outputs,
   int original_height,
   int original_width)
 {
@@ -112,7 +103,7 @@ Detections FCOSPostProcessor::postprocess_detections(
 
         float final_score = std::sqrt(cls_score * ctrness_score);
 
-        if (final_score > score_thresh_) {
+        if (final_score > config_.score_thresh) {
           level_scores.push_back(final_score);
           // Class index directly corresponds to COCO category ID
           level_labels.push_back(static_cast<int>(class_idx));
@@ -126,7 +117,7 @@ Detections FCOSPostProcessor::postprocess_detections(
     }
 
     // Apply top-k filtering
-    std::vector<int> topk_idx = utils::topk_indices(level_scores, topk_candidates_);
+    std::vector<int> topk_idx = utils::topk_indices(level_scores, config_.topk_candidates);
 
     // Decode boxes for kept detections
     for (int idx : topk_idx) {
@@ -173,10 +164,10 @@ Detections FCOSPostProcessor::postprocess_detections(
   //std::cout << "Collected " << all_boxes.size() << " candidate detections" << std::endl;
 
   // Apply NMS
-  std::vector<int> nms_indices = utils::apply_nms(all_boxes, all_scores, all_labels, nms_thresh_);
+  std::vector<int> nms_indices = utils::apply_nms(all_boxes, all_scores, all_labels, config_.nms_thresh);
 
   // Limit to max detections per image
-  int max_detections = std::min(detections_per_img_, static_cast<int>(nms_indices.size()));
+  int max_detections = std::min(config_.detections_per_img, static_cast<int>(nms_indices.size()));
   nms_indices.resize(max_detections);
 
   //std::cout << "After NMS: " << nms_indices.size() << " final detections" << std::endl;
