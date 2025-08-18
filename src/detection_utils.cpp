@@ -51,72 +51,57 @@ void print_detection_results(
   }
 }
 
-void plot_detections(
-  const std::string& image_path,
+cv::Mat plot_detections(
+  const cv::Mat & image,
   const Detections& detections,
-  float confidence_threshold,
-  const std::string& output_path)
+  float confidence_threshold)
 {
-  try {
-    // Load image
-    cv::Mat image = cv::imread(image_path);
-    if (image.empty()) {
-      std::cerr << "Could not load image: " << image_path << std::endl;
-      return;
-    }
-
-    cv::Mat image_for_plot = image.clone();
-    int detection_count = 0;
-
-    // Draw predictions with confidence > threshold
-    for (size_t i = 0; i < detections.boxes.size(); ++i) {
-      if (detections.scores[i] >= confidence_threshold) {
-        detection_count++;
-
-        const auto& box = detections.boxes[i];
-        int x1 = static_cast<int>(box.x);
-        int y1 = static_cast<int>(box.y);
-        int x2 = static_cast<int>(box.x + box.width);
-        int y2 = static_cast<int>(box.y + box.height);
-
-        // Draw bounding box in green
-        cv::rectangle(image_for_plot, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 255, 0), 2);
-
-        // Get class name
-        int label_id = detections.labels[i];
-        std::string class_name = get_class_name(label_id);
-
-        // Create label text
-        std::string label_text = class_name + ": " +
-                                std::to_string(detections.scores[i]).substr(0, 5);
-
-        // Calculate text size for background rectangle
-        int baseline = 0;
-        cv::Size text_size = cv::getTextSize(label_text, cv::FONT_HERSHEY_SIMPLEX,
-          0.55, 1.8, &baseline);
-
-        // Draw background rectangle for text
-        cv::rectangle(image_for_plot,
-          cv::Point(x1, y1 - text_size.height - 4),
-          cv::Point(x1 + text_size.width, y1),
-          cv::Scalar(0, 255, 0), -1);
-
-        // Draw text
-        cv::putText(image_for_plot, label_text, cv::Point(x1, y1 - 4),
-          cv::FONT_HERSHEY_SIMPLEX, 0.55, cv::Scalar(0, 0, 0), 1.8);
-      }
-    }
-
-    // Save the result
-    if (cv::imwrite(output_path, image_for_plot)) {
-      std::cout << "✓ Detection plot saved as '" << output_path << "'" << std::endl;
-    } else {
-      std::cerr << "✗ Could not save plot to '" << output_path << "'" << std::endl;
-    }
-
-  } catch (const cv::Exception& e) {
-    std::cerr << "Error plotting detections: " << e.what() << std::endl;
+  if (image.empty()) {
+    std::cerr << "Input image is empty" << std::endl;
+    return cv::Mat(); // Return empty Mat on error
   }
+
+  cv::Mat image_for_plot = image.clone();
+
+  // Draw predictions with confidence > threshold
+  for (size_t i = 0; i < detections.boxes.size(); ++i) {
+    if (detections.scores[i] >= confidence_threshold) {
+
+      const auto& box = detections.boxes[i];
+      int x1 = static_cast<int>(box.x);
+      int y1 = static_cast<int>(box.y);
+      int x2 = static_cast<int>(box.x + box.width);
+      int y2 = static_cast<int>(box.y + box.height);
+
+      // Draw bounding box in green
+      cv::rectangle(image_for_plot, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 255, 0), 2);
+
+      // Get class name
+      int label_id = detections.labels[i];
+      std::string class_name = get_class_name(label_id);
+
+      // Create label text
+      std::string label_text = class_name + ": " +
+        std::to_string(detections.scores[i]).substr(0, 5);
+
+      // Calculate text size for background rectangle
+      int baseline = 0;
+      cv::Size text_size = cv::getTextSize(label_text, cv::FONT_HERSHEY_SIMPLEX,
+        0.55, 1.8, &baseline);
+
+      // Draw background rectangle for text
+      cv::rectangle(image_for_plot,
+        cv::Point(x1, y1 - text_size.height - 4),
+        cv::Point(x1 + text_size.width, y1),
+        cv::Scalar(0, 255, 0), -1);
+
+      // Draw text
+      cv::putText(image_for_plot, label_text, cv::Point(x1, y1 - 4),
+        cv::FONT_HERSHEY_SIMPLEX, 0.55, cv::Scalar(0, 0, 0), 1.8);
+    }
+  }
+
+  return image_for_plot;
 }
 
 std::vector<int> apply_nms(

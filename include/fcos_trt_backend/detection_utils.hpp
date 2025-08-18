@@ -46,11 +46,10 @@ std::string get_class_name(int coco_id);
 void print_detection_results(const Detections& results, size_t max_detections = 20);
 
 // Visualization method to plot detections on image
-void plot_detections(
-  const std::string& image_path,
+cv::Mat plot_detections(
+  const cv::Mat & image,
   const Detections& detections,
-  float confidence_threshold = 0.5f,
-  const std::string& output_path = "detection_results.png");
+  float confidence_threshold = 0.5f);
 
 std::vector<int> apply_nms(
   const std::vector<cv::Rect2f>& boxes,
