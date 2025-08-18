@@ -169,66 +169,34 @@ Detections FCOSPostProcessor::postprocess_detections(
   // Limit to max detections per image
   int max_detections = std::min(config_.detections_per_img, static_cast<int>(nms_indices.size()));
   nms_indices.resize(max_detections);
-
   //std::cout << "After NMS: " << nms_indices.size() << " final detections" << std::endl;
 
-  // Prepare intermediate results (still in processed image coordinates)
-  Detections processed_result;
-  processed_result.boxes.reserve(nms_indices.size());
-  processed_result.scores.reserve(nms_indices.size());
-  processed_result.labels.reserve(nms_indices.size());
-
-  for (int idx : nms_indices) {
-    processed_result.boxes.push_back(all_boxes[idx]);
-    processed_result.scores.push_back(all_scores[idx]);
-    processed_result.labels.push_back(all_labels[idx]); // COCO category ID
-  }
-
-  // CRITICAL: Transform coordinates from processed image space to original image space
-  Detections final_result = transform_coordinates_to_original(
-    processed_result,
-    processed_height,
-    processed_width,
-    original_height,
-    original_width
-  );
-
-  //std::cout << "Postprocessing completed successfully!" << std::endl;
-  return final_result;
-}
-
-Detections FCOSPostProcessor::transform_coordinates_to_original(
-  const Detections& detections,
-  int processed_height,
-  int processed_width,
-  int original_height,
-  int original_width)
-{
-  // Calculate scale factors
+  // Calculate scale factors for coordinate transformation
   float scale_x = static_cast<float>(original_width) / static_cast<float>(processed_width);
   float scale_y = static_cast<float>(original_height) / static_cast<float>(processed_height);
 
-  Detections transformed_result;
-  transformed_result.scores = detections.scores;  // Scores don't change
-  transformed_result.labels = detections.labels;  // Labels don't change
-  transformed_result.boxes.reserve(detections.boxes.size());
+  // Prepare intermediate results (still in processed image coordinates)
+  Detections final_result;
+  final_result.boxes.reserve(nms_indices.size());
+  final_result.scores.reserve(nms_indices.size());
+  final_result.labels.reserve(nms_indices.size());
 
-  // Transform each bounding box
-  for (const auto& box : detections.boxes) {
-    // Scale the coordinates
+  for (int idx : nms_indices) {
+    // Transform coordinates directly
+    const auto& box = all_boxes[idx];
     float new_x = box.x * scale_x;
     float new_y = box.y * scale_y;
     float new_width = box.width * scale_x;
     float new_height = box.height * scale_y;
 
-    // Clip to original image boundaries
+    // Clip to original image boundaries and store
     cv::Rect2f transformed_box(new_x, new_y, new_width, new_height);
-    transformed_box = utils::clip_box_to_image(transformed_box, original_height, original_width);
-
-    transformed_result.boxes.push_back(transformed_box);
+    final_result.boxes.push_back(utils::clip_box_to_image(transformed_box, original_height, original_width));
+    final_result.scores.push_back(all_scores[idx]);
+    final_result.labels.push_back(all_labels[idx]);
   }
-
-  return transformed_result;
+  //std::cout << "Postprocessing completed successfully!" << std::endl;
+  return final_result;
 }
 
 std::vector<std::vector<float>> FCOSPostProcessor::split_tensor_by_levels(

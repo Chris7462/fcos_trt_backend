@@ -73,14 +73,6 @@ private:
     const std::vector<int64_t>& num_anchors_per_level,
     int tensor_dim);
 
-  // Transform coordinates from processed image space to original image space
-  Detections transform_coordinates_to_original(
-    const Detections& detections,
-    int processed_height,
-    int processed_width,
-    int original_height,
-    int original_width);
-
   static inline float sigmoid(float x) {
     return 1.0f / (1.0f + std::exp(-x));
   }
