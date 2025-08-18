@@ -59,7 +59,7 @@ public:
    * @return Processed detections in original image coordinates
    */
   Detections postprocess_detections(
-    const HeadOutputs& head_outputs,
+    const HeadOutputs & head_outputs,
     int original_height,
     int original_width);
 
@@ -69,11 +69,12 @@ private:
 
   // Helper methods for postprocessing pipeline
   std::vector<std::vector<float>> split_tensor_by_levels(
-    const std::vector<float>& tensor,
-    const std::vector<int64_t>& num_anchors_per_level,
+    const std::vector<float> & tensor,
+    const std::vector<int64_t> & num_anchors_per_level,
     int tensor_dim);
 
-  static inline float sigmoid(float x) {
+  static inline float sigmoid(float x)
+  {
     return 1.0f / (1.0f + std::exp(-x));
   }
 };

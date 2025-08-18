@@ -12,7 +12,7 @@ from torchvision.models.detection import FCOS_ResNet50_FPN_Weights
 
 
 class FCOSBackbone(Module):
-    '''Wrapper to extract only the Backbone from FCOS model.'''
+    """Wrapper to extract only the Backbone from FCOS model."""
 
     def __init__(self):
         super().__init__()
@@ -34,7 +34,7 @@ class FCOSBackbone(Module):
 
         # Handle case where backbone returns a single tensor (convert to OrderedDict)
         if isinstance(features, torch.Tensor):
-            features = OrderedDict([("0", features)])
+            features = OrderedDict([('0', features)])
 
         # Convert to list as expected by head and anchor_generator
         features_list = list(features.values())
@@ -58,8 +58,9 @@ class FCOSBackbone(Module):
             'num_anchors_per_level': torch.tensor(num_anchors_per_level)
         }
 
+
 def export_fcos_model(output_path, input_height, input_width):
-    print("Creating pretrained FCOS backbone model...")
+    print('Creating pretrained FCOS backbone model...')
 
     # Create backbone-only version
     model = FCOSBackbone()
@@ -75,7 +76,6 @@ def export_fcos_model(output_path, input_height, input_width):
             output_path,
             export_params=True,
             opset_version=17,
-            do_constant_folding=True,
             input_names=['input'],
             output_names=[
                 'cls_logits',
@@ -94,17 +94,18 @@ def export_fcos_model(output_path, input_height, input_width):
         raise
 
     # Test the exported model
-    print("\nTesting ONNX model...")
+    print('\nTesting ONNX model...')
     try:
         import onnx
         onnx_model = onnx.load(output_path)
         onnx.checker.check_model(onnx_model)
-        print("✓ ONNX model validation passed")
+        print('✓ ONNX model validation passed')
     except ImportError:
         print('⚠ ONNX package not available - skipping model validation')
         print('  Install with: pip install onnx')
     except Exception as e:
         print(f'✗ ONNX model validation failed: {e}')
+
 
 if __name__ == '__main__':
     # construct the argument parse and parse the arguments
@@ -114,7 +115,7 @@ if __name__ == '__main__':
     ap.add_argument('--output-dir', type=str, default='onnxs',
                     help='Path to save the exported model')
     args = vars(ap.parse_args())
-    #args = {'height': 374, 'width': 1238, 'output_dir': 'fcos_trt_backend/onnxs'}
+    # args = {'height': 374, 'width': 1238, 'output_dir': 'fcos_trt_backend/onnxs'}
 
     # Create output directory if it doesn't exist
     os.makedirs(args['output_dir'], exist_ok=True)

@@ -9,7 +9,7 @@
 // Local includes
 #include "fcos_trt_backend/fcos_post_processor.hpp"
 #include "fcos_trt_backend/exception.hpp"
-#include"fcos_trt_backend/detection_utils.hpp"
+#include "fcos_trt_backend/detection_utils.hpp"
 
 
 namespace fcos_trt_backend
@@ -83,10 +83,10 @@ Detections FCOSPostProcessor::postprocess_detections(
 
   // Process each pyramid level
   for (size_t level = 0; level < cls_logits_per_level.size(); ++level) {
-    const auto& cls_logits = cls_logits_per_level[level];
-    const auto& bbox_regression = bbox_regression_per_level[level];
-    const auto& bbox_ctrness = bbox_ctrness_per_level[level];
-    const auto& anchors = anchors_per_level[level];
+    const auto & cls_logits = cls_logits_per_level[level];
+    const auto & bbox_regression = bbox_regression_per_level[level];
+    const auto & bbox_ctrness = bbox_ctrness_per_level[level];
+    const auto & anchors = anchors_per_level[level];
 
     size_t level_anchors = head_outputs.num_anchors_per_level[level];
 
@@ -164,7 +164,8 @@ Detections FCOSPostProcessor::postprocess_detections(
   //std::cout << "Collected " << all_boxes.size() << " candidate detections" << std::endl;
 
   // Apply NMS
-  std::vector<int> nms_indices = utils::apply_nms(all_boxes, all_scores, all_labels, config_.nms_thresh);
+  std::vector<int> nms_indices =
+    utils::apply_nms(all_boxes, all_scores, all_labels, config_.nms_thresh);
 
   // Limit to max detections per image
   int max_detections = std::min(config_.detections_per_img, static_cast<int>(nms_indices.size()));
@@ -183,7 +184,7 @@ Detections FCOSPostProcessor::postprocess_detections(
 
   for (int idx : nms_indices) {
     // Transform coordinates directly
-    const auto& box = all_boxes[idx];
+    const auto & box = all_boxes[idx];
     float new_x = box.x * scale_x;
     float new_y = box.y * scale_y;
     float new_width = box.width * scale_x;
@@ -191,7 +192,8 @@ Detections FCOSPostProcessor::postprocess_detections(
 
     // Clip to original image boundaries and store
     cv::Rect2f transformed_box(new_x, new_y, new_width, new_height);
-    final_result.boxes.push_back(utils::clip_box_to_image(transformed_box, original_height, original_width));
+    final_result.boxes.push_back(
+      utils::clip_box_to_image(transformed_box, original_height, original_width));
     final_result.scores.push_back(all_scores[idx]);
     final_result.labels.push_back(all_labels[idx]);
   }
@@ -200,8 +202,8 @@ Detections FCOSPostProcessor::postprocess_detections(
 }
 
 std::vector<std::vector<float>> FCOSPostProcessor::split_tensor_by_levels(
-  const std::vector<float>& tensor,
-  const std::vector<int64_t>& num_anchors_per_level,
+  const std::vector<float> & tensor,
+  const std::vector<int64_t> & num_anchors_per_level,
   int tensor_dim)
 {
   std::vector<std::vector<float>> split_tensors;
