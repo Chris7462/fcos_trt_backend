@@ -17,6 +17,17 @@ namespace fcos_trt_backend
 namespace utils
 {
 
+// Color structure for RGB values
+struct Color {
+  int r, g, b;
+  Color(int red = 0, int green = 0, int blue = 0) : r(red), g(green), b(blue) {}
+
+  // Convert to OpenCV Scalar (BGR format)
+  cv::Scalar toScalar() const {
+    return cv::Scalar(b, g, r); // OpenCV uses BGR, not RGB
+  }
+};
+
 // COCO class names mapping with correct category IDs (with gaps)
 const std::unordered_map<int, std::string> COCO_CATEGORY_NAMES = {
   {0, "__background__"},
@@ -38,6 +49,12 @@ const std::unordered_map<int, std::string> COCO_CATEGORY_NAMES = {
   {84, "book"}, {85, "clock"}, {86, "vase"}, {87, "scissors"}, {88, "teddy bear"},
   {89, "hair drier"}, {90, "toothbrush"}
 };
+
+// COCO color mapping - initialize once
+const std::unordered_map<int, Color>& get_coco_colors();
+
+// Get class-specific color
+Color get_class_color(int label_id);
 
 // Get class name from COCO category ID
 std::string get_class_name(int coco_id);

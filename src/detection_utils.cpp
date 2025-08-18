@@ -51,6 +51,54 @@ void print_detection_results(
   }
 }
 
+// Initialize COCO colors once
+const std::unordered_map<int, Color>& get_coco_colors() {
+  static std::unordered_map<int, Color> coco_colors = []() {
+    std::vector<Color> base_colors = {
+      Color(255, 0, 0), Color(0, 255, 0), Color(0, 0, 255), Color(255, 255, 0),
+      Color(255, 0, 255), Color(0, 255, 255), Color(255, 128, 0), Color(128, 0, 255),
+      Color(255, 0, 128), Color(128, 255, 0), Color(0, 128, 255), Color(255, 128, 128),
+      Color(128, 255, 128), Color(128, 128, 255), Color(255, 192, 0), Color(192, 0, 255),
+      Color(0, 192, 255), Color(255, 64, 64), Color(64, 255, 64), Color(64, 64, 255),
+      Color(255, 255, 128), Color(255, 128, 255), Color(128, 255, 255), Color(192, 96, 0),
+      Color(96, 0, 192), Color(0, 96, 192), Color(224, 32, 32), Color(32, 224, 32),
+      Color(32, 32, 224), Color(224, 224, 0), Color(224, 0, 224), Color(0, 224, 224),
+      Color(160, 82, 45), Color(255, 20, 147), Color(0, 100, 0), Color(139, 69, 19),
+      Color(255, 140, 0), Color(218, 112, 214), Color(30, 144, 255), Color(220, 20, 60)
+    };
+
+    const std::vector<int> coco_ids = {
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19, 20,
+      21, 22, 23, 24, 25, 27, 28, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41,
+      42, 43, 44, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60,
+      61, 62, 63, 64, 65, 67, 70, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82,
+      84, 85, 86, 87, 88, 89, 90
+    };
+
+    std::unordered_map<int, Color> colors;
+    for (size_t i = 0; i < coco_ids.size(); ++i) {
+      if (coco_ids[i] == 0) {
+        // Background should be black
+        colors[coco_ids[i]] = Color(0, 0, 0);
+      } else {
+        colors[coco_ids[i]] = base_colors[(i - 1) % base_colors.size()];
+      }
+    }
+    return colors;
+  }();
+  return coco_colors;
+}
+
+Color get_class_color(int label_id) {
+  const auto& color_map = get_coco_colors();
+  auto it = color_map.find(label_id);
+  if (it != color_map.end()) {
+      return it->second;
+  }
+  // Default color if class not found (shouldn't happen with valid COCO IDs)
+  return Color(128, 128, 128); // Gray
+}
+
 cv::Mat plot_detections(
   const cv::Mat & image,
   const Detections& detections,
@@ -73,11 +121,15 @@ cv::Mat plot_detections(
       int x2 = static_cast<int>(box.x + box.width);
       int y2 = static_cast<int>(box.y + box.height);
 
-      // Draw bounding box in green
-      cv::rectangle(image_for_plot, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 255, 0), 2);
+      // Get class-specific color
+      int label_id = detections.labels[i];
+      Color class_color = get_class_color(label_id);
+      cv::Scalar box_color = class_color.toScalar();
+
+      // Draw bounding box with class-specific color
+      cv::rectangle(image_for_plot, cv::Point(x1, y1), cv::Point(x2, y2), box_color, 2);
 
       // Get class name
-      int label_id = detections.labels[i];
       std::string class_name = get_class_name(label_id);
 
       // Create label text
@@ -89,15 +141,20 @@ cv::Mat plot_detections(
       cv::Size text_size = cv::getTextSize(label_text, cv::FONT_HERSHEY_SIMPLEX,
         0.55, 1.8, &baseline);
 
-      // Draw background rectangle for text
+      // Draw background rectangle for text (same color as box)
       cv::rectangle(image_for_plot,
         cv::Point(x1, y1 - text_size.height - 4),
         cv::Point(x1 + text_size.width, y1),
-        cv::Scalar(0, 255, 0), -1);
+        box_color, -1);
+
+      // Choose text color based on background brightness
+      // Use white text on dark backgrounds, black text on light backgrounds
+      int brightness = (class_color.r + class_color.g + class_color.b) / 3;
+      cv::Scalar text_color = brightness < 128 ? cv::Scalar(255, 255, 255) : cv::Scalar(0, 0, 0);
 
       // Draw text
       cv::putText(image_for_plot, label_text, cv::Point(x1, y1 - 4),
-        cv::FONT_HERSHEY_SIMPLEX, 0.55, cv::Scalar(0, 0, 0), 1.8);
+        cv::FONT_HERSHEY_SIMPLEX, 0.55, text_color, 1.8);
     }
   }
 
