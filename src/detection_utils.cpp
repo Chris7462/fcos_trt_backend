@@ -213,8 +213,7 @@ std::vector<int> apply_nms(
       cv::dnn::NMSBoxes(class_boxes, class_scores, 0.0f, nms_threshold, nms_indices);
     } catch (const cv::Exception& e) {
       // Fallback: implement simple greedy NMS if OpenCV version issues
-      std::cout << "OpenCV NMS failed, using fallback implementation" << std::endl;
-      nms_indices = apply_greedy_nms(class_boxes, class_scores, nms_threshold);
+      std::cerr << "OpenCV NMS failed with error: " << std::endl;
     }
 
     // Convert back to original indices
@@ -230,67 +229,6 @@ std::vector<int> apply_nms(
     });
 
   return final_indices;
-}
-
-std::vector<int> apply_greedy_nms(
-  const std::vector<cv::Rect>& boxes,
-  const std::vector<float>& scores,
-  float nms_threshold)
-{
-  std::vector<int> indices(boxes.size());
-  std::iota(indices.begin(), indices.end(), 0);
-
-  // Sort by score (descending)
-  std::sort(indices.begin(), indices.end(),
-    [&scores](int a, int b) {
-      return scores[a] > scores[b];
-    });
-
-  std::vector<bool> suppressed(boxes.size(), false);
-  std::vector<int> keep;
-
-  for (size_t i = 0; i < indices.size(); ++i) {
-    int idx = indices[i];
-    if (suppressed[idx]) {
-      continue;
-    }
-
-    keep.push_back(idx);
-
-    // Suppress overlapping boxes
-    for (size_t j = i + 1; j < indices.size(); ++j) {
-      int next_idx = indices[j];
-      if (suppressed[next_idx]) {
-        continue;
-      }
-
-      float iou = compute_iou(boxes[idx], boxes[next_idx]);
-      if (iou > nms_threshold) {
-        suppressed[next_idx] = true;
-      }
-    }
-  }
-
-  return keep;
-}
-
-float compute_iou(const cv::Rect& box1, const cv::Rect& box2)
-{
-  int x1 = std::max(box1.x, box2.x);
-  int y1 = std::max(box1.y, box2.y);
-  int x2 = std::min(box1.x + box1.width, box2.x + box2.width);
-  int y2 = std::min(box1.y + box1.height, box2.y + box2.height);
-
-  if (x2 <= x1 || y2 <= y1) {
-    return 0.0f;
-  }
-
-  float intersection = (x2 - x1) * (y2 - y1);
-  float area1 = box1.width * box1.height;
-  float area2 = box2.width * box2.height;
-  float union_area = area1 + area2 - intersection;
-
-  return intersection / union_area;
 }
 
 cv::Rect2f clip_box_to_image(

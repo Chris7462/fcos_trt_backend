@@ -74,13 +74,6 @@ std::vector<int> apply_nms(
   const std::vector<int>& labels,
   float nms_threshold);
 
-std::vector<int> apply_greedy_nms(
-  const std::vector<cv::Rect>& boxes,
-  const std::vector<float>& scores,
-  float nms_threshold);
-
-float compute_iou(const cv::Rect& box1, const cv::Rect& box2);
-
 cv::Rect2f clip_box_to_image(const cv::Rect2f& box, int image_height, int image_width);
 
 std::vector<int> topk_indices(const std::vector<float>& scores, int k);
