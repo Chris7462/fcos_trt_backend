@@ -1,25 +1,28 @@
 #!/usr/bin/env python3
 """Script to verify FCOS postprocessing implementation by comparing with original model."""
 
+import argparse
+from collections import OrderedDict
+import os
+from typing import Dict, List
+
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+from PIL import Image
+
 import torch
 from torch.nn import Module
+from torchvision.models.detection import _utils as det_utils
 from torchvision.models.detection import fcos_resnet50_fpn
 from torchvision.models.detection import FCOS_ResNet50_FPN_Weights
 from torchvision.ops import boxes as box_ops
-from collections import OrderedDict
-import numpy as np
-from typing import List, Dict, Tuple, Any
-from torchvision.models.detection import _utils as det_utils
-from PIL import Image
 import torchvision.transforms as transforms
-import cv2
-import matplotlib.pyplot as plt
-import argparse
-import os
 
 
 class FCOSBackbone(Module):
     """Wrapper to extract only the Backbone from FCOS model."""
+
     def __init__(self):
         super().__init__()
         # Load pretrained FCOS model
@@ -40,7 +43,7 @@ class FCOSBackbone(Module):
 
         # Handle case where backbone returns a single tensor (convert to OrderedDict)
         if isinstance(features, torch.Tensor):
-            features = OrderedDict([("0", features)])
+            features = OrderedDict([('0', features)])
 
         # Convert to list as expected by head and anchor_generator
         features_list = list(features.values())
@@ -66,9 +69,10 @@ class FCOSBackbone(Module):
 
 
 class FCOSPostProcessor:
-    """Standalone post-processor that mimics the original FCOS postprocess_detections method"""
+    """Standalone post-processor that mimics the original FCOS postprocess_detections method."""
 
-    def __init__(self, score_thresh=0.2, nms_thresh=0.6, detections_per_img=100, topk_candidates=1000):
+    def __init__(self, score_thresh=0.2, nms_thresh=0.6, detections_per_img=100,
+                 topk_candidates=1000):
         self.score_thresh = score_thresh
         self.nms_thresh = nms_thresh
         self.detections_per_img = detections_per_img
@@ -84,9 +88,7 @@ class FCOSPostProcessor:
         image_sizes: torch.Tensor,  # Now single tensor instead of list
         num_anchors_per_level: torch.Tensor  # Now tensor instead of list
     ) -> List[Dict[str, torch.Tensor]]:
-        """
-        Postprocess the raw outputs from FCOSBackbone to get final detections
-        """
+        """Postprocess the raw outputs from FCOSBackbone to get final detections."""
         # Convert tensors back to expected formats
         num_anchors_per_level = num_anchors_per_level.tolist()
         image_sizes = [tuple(image_sizes.tolist())]  # Convert back to list of tuples
@@ -137,7 +139,7 @@ class FCOSPostProcessor:
                 topk_idxs = topk_idxs[idxs]
 
                 # Convert flat indices back to anchor and class indices
-                anchor_idxs = torch.div(topk_idxs, num_classes, rounding_mode="floor")
+                anchor_idxs = torch.div(topk_idxs, num_classes, rounding_mode='floor')
                 labels_per_level = topk_idxs % num_classes
 
                 # Decode bounding boxes
@@ -160,9 +162,9 @@ class FCOSPostProcessor:
             keep = keep[:self.detections_per_img]
 
             detections.append({
-                "boxes": image_boxes[keep],
-                "scores": image_scores[keep],
-                "labels": image_labels[keep],
+                'boxes': image_boxes[keep],
+                'scores': image_scores[keep],
+                'labels': image_labels[keep],
             })
 
         return detections
@@ -189,67 +191,68 @@ COCO_INSTANCE_CATEGORY_NAMES = {
     84: 'book', 85: 'clock', 86: 'vase', 87: 'scissors', 88: 'teddy bear',
     89: 'hair drier', 90: 'toothbrush'
 }
-# IDs 12, 26, 29, 30, 45, 66, 68, 69, 71, 83 are not used (they were categories in early drafts of COCO but removed).
+# IDs 12, 26, 29, 30, 45, 66, 68, 69, 71, 83 are not used
+# they were categories in early drafts of COCO but removed).
 
 
 def print_tensor_stats(tensor, name, print_first_n=20):
     """Print statistics and first N values of a tensor."""
     flat_tensor = tensor.flatten()
 
-    print(f"{name} (first {print_first_n} values):")
+    print(f'{name} (first {print_first_n} values):')
     first_values = flat_tensor[:print_first_n].detach().cpu().numpy()
 
     # Handle integer vs float tensors for formatting
     if tensor.dtype in [torch.int32, torch.int64, torch.long]:
-        values_str = ' '.join([f"{val}" for val in first_values])
+        values_str = ' '.join([f'{val}' for val in first_values])
     else:
-        values_str = ' '.join([f"{val:.5f}" for val in first_values])
+        values_str = ' '.join([f'{val:.5f}' for val in first_values])
 
-    print(f"  {values_str}")
-    print(f"  ... (total size: {flat_tensor.numel()})")
+    print(f'  {values_str}')
+    print(f'  ... (total size: {flat_tensor.numel()})')
 
-    print(f"{name} Statistics:")
+    print(f'{name} Statistics:')
     if tensor.dtype in [torch.int32, torch.int64, torch.long]:
-        print(f"  Min: {flat_tensor.min()}")
-        print(f"  Max: {flat_tensor.max()}")
-        print(f"  Mean: {flat_tensor.float().mean():.5f}")
+        print(f'  Min: {flat_tensor.min()}')
+        print(f'  Max: {flat_tensor.max()}')
+        print(f'  Mean: {flat_tensor.float().mean():.5f}')
     else:
-        print(f"  Min: {flat_tensor.min():.5f}")
-        print(f"  Max: {flat_tensor.max():.5f}")
-        print(f"  Mean: {flat_tensor.mean():.5f}")
-    print(f"  Shape: {tensor.shape}")
+        print(f'  Min: {flat_tensor.min():.5f}')
+        print(f'  Max: {flat_tensor.max():.5f}')
+        print(f'  Mean: {flat_tensor.mean():.5f}')
+    print(f'  Shape: {tensor.shape}')
     print()
 
 
 def load_and_preprocess_image(image_path):
     """Load and preprocess image to tensor format."""
-    print(f"Loading image: {image_path}")
+    print(f'Loading image: {image_path}')
 
     try:
         # Load image
         pil_image = Image.open(image_path).convert('RGB')
         original_size = pil_image.size  # (width, height)
-        print(f"Original image size: {original_size}")
+        print(f'Original image size: {original_size}')
 
         # Convert to tensor
         transform = transforms.ToTensor()
         image_tensor = transform(pil_image)
 
-        print(f"Image tensor shape: {image_tensor.shape}")
+        print(f'Image tensor shape: {image_tensor.shape}')
         return [image_tensor], original_size
 
     except Exception as e:
-        print(f"Error loading image: {e}")
+        print(f'Error loading image: {e}')
         raise
 
 
 def plot_detections(image_path, detections, title, confidence_threshold=0.5):
-    """Plot detection results on the image"""
+    """Plot detection results on the image."""
     try:
         # Load image using OpenCV
         image_bgr = cv2.imread(image_path)
         if image_bgr is None:
-            print(f"Could not load image: {image_path}")
+            print(f'Could not load image: {image_path}')
             return None
 
         image_for_plot = image_bgr.copy()
@@ -259,7 +262,7 @@ def plot_detections(image_path, detections, title, confidence_threshold=0.5):
         scores = detections['scores']
         labels = detections['labels']
 
-        print(f"\n=== {title} Detection Results ===")
+        print(f'\n=== {title} Detection Results ===')
         detection_count = 0
 
         for i, (box, score, label) in enumerate(zip(boxes, scores, labels)):
@@ -271,42 +274,44 @@ def plot_detections(image_path, detections, title, confidence_threshold=0.5):
 
                 # Get class name using dictionary lookup
                 label_id = label.item()
-                class_name = COCO_INSTANCE_CATEGORY_NAMES.get(label_id, f'unknown_class_{label_id}')
+                class_name = COCO_INSTANCE_CATEGORY_NAMES.get(label_id,
+                                                              f'unknown_class_{label_id}')
 
                 # Draw label and score
                 label_text = f'{class_name}: {score:.3f}'
                 cv2.putText(image_for_plot, label_text, (x1, y1 - 10),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-                print(f"Detection {detection_count}: {class_name} (ID: {label_id}) - Confidence: {score:.3f}")
-                print(f"  Box: [{x1}, {y1}, {x2}, {y2}]")
+                print(f'Detection {detection_count}: {class_name}'
+                      f'(ID: {label_id}) - Confidence: {score:.3f}')
+                print(f'  Box: [{x1}, {y1}, {x2}, {y2}]')
 
-        print(f"Total detections above {confidence_threshold} confidence: {detection_count}")
+        print(f'Total detections above {confidence_threshold} confidence: {detection_count}')
         return cv2.cvtColor(image_for_plot, cv2.COLOR_BGR2RGB)
 
     except Exception as e:
-        print(f"Error plotting detections: {e}")
+        print(f'Error plotting detections: {e}')
         return None
 
 
 def compare_detection_results(original_results, custom_results, tolerance=1e-4):
     """Compare detection results between original and custom models."""
-    print(f"\n=== Comparing Detection Results (tolerance: {tolerance}) ===")
+    print(f'\n=== Comparing Detection Results (tolerance: {tolerance}) ===')
 
     all_match = True
 
     for i, (orig, custom) in enumerate(zip(original_results, custom_results)):
-        print(f"\nImage {i+1} Comparison:")
+        print(f'\nImage {i+1} Comparison:')
         print(f"  Original detections: {len(orig['boxes'])}")
         print(f"  Custom detections:   {len(custom['boxes'])}")
 
         if len(orig['boxes']) != len(custom['boxes']):
-            print(f"  ✗ Number of detections differ!")
+            print('  ✗ Number of detections differ!')
             all_match = False
             continue
 
         if len(orig['boxes']) == 0:
-            print(f"  ✓ Both models found no detections")
+            print('  ✓ Both models found no detections')
             continue
 
         # Compare sorted results (by score, descending)
@@ -322,13 +327,15 @@ def compare_detection_results(original_results, custom_results, tolerance=1e-4):
         custom_labels_sorted = custom['labels'][custom_sorted_idx]
 
         # Check if boxes match
-        boxes_match = torch.allclose(orig_boxes_sorted, custom_boxes_sorted, atol=tolerance, rtol=tolerance)
-        scores_match = torch.allclose(orig_scores_sorted, custom_scores_sorted, atol=tolerance, rtol=tolerance)
+        boxes_match = torch.allclose(orig_boxes_sorted, custom_boxes_sorted, atol=tolerance,
+                                     rtol=tolerance)
+        scores_match = torch.allclose(orig_scores_sorted, custom_scores_sorted, atol=tolerance,
+                                      rtol=tolerance)
         labels_match = torch.equal(orig_labels_sorted, custom_labels_sorted)
 
-        print(f"  Boxes match: {boxes_match}")
-        print(f"  Scores match: {scores_match}")
-        print(f"  Labels match: {labels_match}")
+        print(f'  Boxes match: {boxes_match}')
+        print(f'  Scores match: {scores_match}')
+        print(f'  Labels match: {labels_match}')
 
         if not (boxes_match and scores_match and labels_match):
             all_match = False
@@ -336,49 +343,55 @@ def compare_detection_results(original_results, custom_results, tolerance=1e-4):
             # Print difference statistics
             if not boxes_match:
                 box_diff = torch.abs(orig_boxes_sorted - custom_boxes_sorted)
-                print(f"    Max box difference: {box_diff.max():.8f}")
-                print(f"    Mean box difference: {box_diff.mean():.8f}")
+                print(f'    Max box difference: {box_diff.max():.8f}')
+                print(f'    Mean box difference: {box_diff.mean():.8f}')
 
             if not scores_match:
                 score_diff = torch.abs(orig_scores_sorted - custom_scores_sorted)
-                print(f"    Max score difference: {score_diff.max():.8f}")
-                print(f"    Mean score difference: {score_diff.mean():.8f}")
+                print(f'    Max score difference: {score_diff.max():.8f}')
+                print(f'    Mean score difference: {score_diff.mean():.8f}')
 
             # Show first few detections for comparison
             max_show = min(3, len(orig_boxes_sorted))
             for j in range(max_show):
-                print(f"    Detection {j+1}:")
-                print(f"      Original - Box: {orig_boxes_sorted[j]}, Score: {orig_scores_sorted[j]:.6f}, Label: {orig_labels_sorted[j]}")
-                print(f"      Custom   - Box: {custom_boxes_sorted[j]}, Score: {custom_scores_sorted[j]:.6f}, Label: {custom_labels_sorted[j]}")
+                print(f'    Detection {j+1}:')
+                print(f'      Original - Box: {orig_boxes_sorted[j]},'
+                      f'Score: {orig_scores_sorted[j]:.6f}, Label: {orig_labels_sorted[j]}')
+                print(f'      Custom   - Box: {custom_boxes_sorted[j]},'
+                      f'Score: {custom_scores_sorted[j]:.6f}, Label: {custom_labels_sorted[j]}')
 
     if all_match:
-        print("\n🎉 SUCCESS: All detection results match between models!")
+        print('\n🎉 SUCCESS: All detection results match between models!')
     else:
-        print("\n❌ DIFFERENCES: Detection results differ between models!")
+        print('\n❌ DIFFERENCES: Detection results differ between models!')
 
     return all_match
 
 
 def visualize_comparison(image_path, original_results, custom_results, confidence_threshold=0.5):
-    """Create side-by-side comparison of detection results"""
-    print(f"\n=== Creating Visual Comparison (confidence > {confidence_threshold}) ===")
+    """Create side-by-side comparison of detection results."""
+    print(f'\n=== Creating Visual Comparison (confidence > {confidence_threshold}) ===')
 
     # Plot original results
-    original_plot = plot_detections(image_path, original_results[0], "Original FCOS", confidence_threshold)
+    original_plot = plot_detections(image_path, original_results[0],
+                                    'Original FCOS', confidence_threshold)
 
     # Plot custom results
-    custom_plot = plot_detections(image_path, custom_results[0], "Custom FCOSBackbone", confidence_threshold)
+    custom_plot = plot_detections(image_path, custom_results[0],
+                                  'Custom FCOSBackbone', confidence_threshold)
 
     if original_plot is not None and custom_plot is not None:
         # Create side-by-side comparison
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(20, 10))
 
         ax1.imshow(original_plot)
-        ax1.set_title(f'Original FCOS Model (with confidence > {confidence_threshold})', fontsize=14, fontweight='bold')
+        ax1.set_title(f'Original FCOS Model (with conf. > {confidence_threshold})',
+                      fontsize=14, fontweight='bold')
         ax1.axis('off')
 
         ax2.imshow(custom_plot)
-        ax2.set_title(f'Custom FCOSBackbone + PostProcessor (with confidence > {confidence_threshold})', fontsize=14, fontweight='bold')
+        ax2.set_title(f'Custom FCOSBackbone + PostProcessor (with conf. > {confidence_threshold})',
+                      fontsize=14, fontweight='bold')
         ax2.axis('off')
 
         plt.tight_layout()
@@ -386,27 +399,26 @@ def visualize_comparison(image_path, original_results, custom_results, confidenc
         # Save the comparison plot
         try:
             plt.savefig('fcos_postprocess_comparison.png', dpi=150, bbox_inches='tight')
-            print("✓ Comparison plot saved as 'fcos_postprocess_comparison.png'")
+            print('✓ Comparison plot saved as "fcos_postprocess_comparison.png"')
         except Exception as e:
-            print(f"⚠️  Could not save plot: {e}")
+            print(f'⚠️  Could not save plot: {e}')
 
         plt.show()
     else:
-        print("❌ Could not create visualization - image loading failed")
+        print('❌ Could not create visualization - image loading failed')
 
 
 def run_inference_comparison(image_path, confidence_threshold=0.5, tolerance=1e-4):
     """Run inference comparison between original FCOS and custom FCOSBackbone + PostProcessor."""
-
     # Check if files exist
     if not os.path.exists(image_path):
-        print(f"Error: Test image not found at {image_path}")
-        raise FileNotFoundError(f"Test image not found at {image_path}")
+        print(f'Error: Test image not found at {image_path}')
+        raise FileNotFoundError(f'Test image not found at {image_path}')
 
-    print(f"=== FCOS Postprocessing Verification ===")
-    print(f"Test image: {image_path}")
-    print(f"Confidence threshold: {confidence_threshold}")
-    print(f"Comparison tolerance: {tolerance}")
+    print('=== FCOS Postprocessing Verification ===')
+    print(f'Test image: {image_path}')
+    print(f'Confidence threshold: {confidence_threshold}')
+    print(f'Comparison tolerance: {tolerance}')
 
     # Load and preprocess image
     test_images, original_size = load_and_preprocess_image(image_path)
@@ -415,7 +427,7 @@ def run_inference_comparison(image_path, confidence_threshold=0.5, tolerance=1e-
     torch.manual_seed(42)
     np.random.seed(42)
 
-    print("\n=== Running Original FCOS Model ===")
+    print('\n=== Running Original FCOS Model ===')
     # 1. Original FCOS model
     original_model = fcos_resnet50_fpn(weights=FCOS_ResNet50_FPN_Weights.DEFAULT)
     original_model.eval()
@@ -423,9 +435,9 @@ def run_inference_comparison(image_path, confidence_threshold=0.5, tolerance=1e-
     with torch.no_grad():
         original_results = original_model(test_images)
 
-    print("✓ Original FCOS inference completed!")
+    print('✓ Original FCOS inference completed!')
 
-    print("\n=== Running Custom FCOSBackbone + PostProcessor ===")
+    print('\n=== Running Custom FCOSBackbone + PostProcessor ===')
     # 2. FCOSBackbone + PostProcessor
     backbone_model = FCOSBackbone()
     post_processor = FCOSPostProcessor(
@@ -439,10 +451,10 @@ def run_inference_comparison(image_path, confidence_threshold=0.5, tolerance=1e-
         # Get raw outputs from backbone
         head_outputs = backbone_model(test_images)
 
-        print("Raw outputs from FCOSBackbone:")
-        print_tensor_stats(head_outputs['cls_logits'], "CLS_LOGITS")
-        print_tensor_stats(head_outputs['bbox_regression'], "BBOX_REGRESSION")
-        print_tensor_stats(head_outputs['bbox_ctrness'], "BBOX_CTRNESS")
+        print('Raw outputs from FCOSBackbone:')
+        print_tensor_stats(head_outputs['cls_logits'], 'CLS_LOGITS')
+        print_tensor_stats(head_outputs['bbox_regression'], 'BBOX_REGRESSION')
+        print_tensor_stats(head_outputs['bbox_ctrness'], 'BBOX_CTRNESS')
 
         # Apply post-processing
         custom_results = post_processor.postprocess_detections(
@@ -470,7 +482,7 @@ def run_inference_comparison(image_path, confidence_threshold=0.5, tolerance=1e-
             original_image_sizes
         )
 
-    print("✓ Custom FCOSBackbone + PostProcessor inference completed!")
+    print('✓ Custom FCOSBackbone + PostProcessor inference completed!')
 
     # 3. Compare detection results
     results_match = compare_detection_results(original_results, custom_results, tolerance)
@@ -479,15 +491,15 @@ def run_inference_comparison(image_path, confidence_threshold=0.5, tolerance=1e-
     visualize_comparison(image_path, original_results, custom_results, confidence_threshold)
 
     # 5. Summary
-    print(f"\n=== Final Summary ===")
+    print('\n=== Final Summary ===')
     if results_match:
-        print("🎉 PERFECT: Custom postprocessing implementation matches original FCOS!")
-        print("Your FCOSBackbone + FCOSPostProcessor is working correctly.")
+        print('🎉 PERFECT: Custom postprocessing implementation matches original FCOS!')
+        print('Your FCOSBackbone + FCOSPostProcessor is working correctly.')
     else:
-        print("❌ MISMATCH: Custom postprocessing differs from original FCOS.")
-        print("Check the postprocessing implementation for potential issues.")
+        print('❌ MISMATCH: Custom postprocessing differs from original FCOS.')
+        print('Check the postprocessing implementation for potential issues.')
 
-    print(f"\nCheck 'fcos_postprocess_comparison.png' for visual comparison.")
+    print('\nCheck "fcos_postprocess_comparison.png" for visual comparison.')
 
     return original_results, custom_results
 
@@ -510,5 +522,5 @@ if __name__ == '__main__':
         args.tolerance
     )
 
-    print("\n=== Verification Complete ===")
-    print("If results match, your postprocessing implementation is correct!")
+    print('\n=== Verification Complete ===')
+    print('If results match, your postprocessing implementation is correct!')

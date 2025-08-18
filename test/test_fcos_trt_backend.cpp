@@ -91,6 +91,8 @@ TEST_F(FCOSTrtBackendTest, TestBasicInference)
   auto duration2 = std::chrono::duration<double, std::milli>(end2 - start2);
   std::cout << "PostProcessing time: " << duration2.count() << " ms" << std::endl;
 
+  std::cout << "Total time: " << duration1.count() + duration2.count() << " ms" << std::endl;
+
   cv::Mat image_for_plot = fcos_trt_backend::utils::plot_detections(image, detection_results, 0.5f);
   cv::imwrite("fcos_trt_detections.png", image_for_plot);
 

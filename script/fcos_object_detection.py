@@ -69,8 +69,9 @@ for box, score, label in zip(boxes, scores, labels):
         x1, y1, x2, y2 = map(int, box)
 
         # Print detection outputs with bounding box
-        print(f"Detection {detection_count}: {class_name} (ID: {label_id}) - Confidence: {score:.3f}")
-        print(f"  Box: [{x1}, {y1}, {x2}, {y2}]")
+        print(f'Detection {detection_count}: {class_name}'
+              f'(ID: {label_id}) - Confidence: {score:.3f}')
+        print(f'  Box: [{x1}, {y1}, {x2}, {y2}]')
 
         # Draw bounding box
         cv2.rectangle(image_bgr, (x1, y1), (x2, y2), (0, 0, 255), 2)
@@ -80,7 +81,7 @@ for box, score, label in zip(boxes, scores, labels):
         cv2.putText(image_bgr, label_text, (x1, y1 - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
 
-print(f"Total detections above 0.5 confidence: {detection_count}")
+print(f'Total detections above 0.5 confidence: {detection_count}')
 
 # Show result using matplotlib
 plt.figure(figsize=(10, 8))
