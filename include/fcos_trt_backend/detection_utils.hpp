@@ -8,7 +8,7 @@
 #include <opencv2/core.hpp>
 
 // Local includes
-#include "fcos_trt_backend/detection_types.hpp"
+#include "fcos_trt_backend/fcos_types.hpp"
 
 
 namespace fcos_trt_backend

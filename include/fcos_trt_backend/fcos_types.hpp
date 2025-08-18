@@ -10,6 +10,19 @@
 namespace fcos_trt_backend
 {
 /**
+ * @brief Detection results structure
+ * @details Contains bounding boxes, confidence scores, and class labels
+ *          for object detection results. This is the common interface
+ *          between postprocessor and utility functions.
+ */
+struct Detections
+{
+  std::vector<cv::Rect2f> boxes;  ///< Bounding boxes in image coordinates
+  std::vector<float> scores;      ///< Confidence scores [0.0, 1.0]
+  std::vector<int> labels;        ///< Class labels (COCO category IDs)
+};
+
+/**
  * @brief Head output structure
  * @details Contains cls_logits, bbox_regression, bbox_ctrness, and
  *          anchors. Image sizes is the input tensor size for backbone,

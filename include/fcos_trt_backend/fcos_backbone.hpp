@@ -15,7 +15,7 @@
 #include <opencv2/core.hpp>
 
 // Local header
-#include "fcos_trt_backend/head_types.hpp"
+#include "fcos_trt_backend/fcos_types.hpp"
 
 
 namespace fcos_trt_backend
