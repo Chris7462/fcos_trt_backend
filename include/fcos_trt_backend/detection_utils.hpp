@@ -47,9 +47,8 @@ Color get_class_color(int label_id);
 void print_detection_results(const Detections & results, size_t max_detections = 20);
 
 // Visualization method to plot detections on image
-cv::Mat plot_detections(
-  const cv::Mat & image,
-  const Detections & detections,
+void plot_detections(
+  cv::Mat & image, const Detections & detections,
   float confidence_threshold = 0.5f);
 
 std::vector<int> apply_nms(

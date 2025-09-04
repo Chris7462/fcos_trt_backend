@@ -125,18 +125,10 @@ void print_detection_results(
   }
 }
 
-cv::Mat plot_detections(
-  const cv::Mat & image,
-  const Detections & detections,
+void plot_detections(
+  cv::Mat & image, const Detections & detections,
   float confidence_threshold)
 {
-  if (image.empty()) {
-    std::cerr << "Input image is empty" << std::endl;
-    return cv::Mat(); // Return empty Mat on error
-  }
-
-  cv::Mat image_for_plot = image.clone();
-
   // Draw predictions with confidence > threshold
   for (size_t i = 0; i < detections.boxes.size(); ++i) {
     if (detections.scores[i] >= confidence_threshold) {
@@ -153,7 +145,7 @@ cv::Mat plot_detections(
       cv::Scalar box_color = class_color.toScalar();
 
       // Draw bounding box with class-specific color
-      cv::rectangle(image_for_plot, cv::Point(x1, y1), cv::Point(x2, y2), box_color, 2);
+      cv::rectangle(image, cv::Point(x1, y1), cv::Point(x2, y2), box_color, 2);
 
       // Get class name
       std::string class_name = get_class_name(label_id);
@@ -163,12 +155,14 @@ cv::Mat plot_detections(
         std::to_string(detections.scores[i]).substr(0, 5);
 
       // Calculate text size for background rectangle
+      int font_face = cv::FONT_HERSHEY_SIMPLEX;
+      double font_scale = 0.55;
+      int thickness = 1.8;
       int baseline = 0;
-      cv::Size text_size = cv::getTextSize(label_text, cv::FONT_HERSHEY_SIMPLEX,
-        0.55, 1.8, &baseline);
+      cv::Size text_size = cv::getTextSize(label_text, font_face, font_scale, thickness, &baseline);
 
       // Draw background rectangle for text (same color as box)
-      cv::rectangle(image_for_plot,
+      cv::rectangle(image,
         cv::Point(x1, y1 - text_size.height - 4),
         cv::Point(x1 + text_size.width, y1),
         box_color, -1);
@@ -179,12 +173,10 @@ cv::Mat plot_detections(
       cv::Scalar text_color = brightness < 128 ? cv::Scalar(255, 255, 255) : cv::Scalar(0, 0, 0);
 
       // Draw text
-      cv::putText(image_for_plot, label_text, cv::Point(x1, y1 - 4),
-        cv::FONT_HERSHEY_SIMPLEX, 0.55, text_color, 1.8);
+      cv::putText(image, label_text, cv::Point(x1, y1 - 4),
+        font_face, font_scale, text_color, thickness);
     }
   }
-
-  return image_for_plot;
 }
 
 std::vector<int> apply_nms(

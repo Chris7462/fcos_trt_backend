@@ -93,7 +93,8 @@ TEST_F(FCOSTrtBackendTest, TestBasicInference)
 
   std::cout << "Total time: " << duration1.count() + duration2.count() << " ms" << std::endl;
 
-  cv::Mat image_for_plot = fcos_trt_backend::utils::plot_detections(image, detection_results, 0.5f);
+  cv::Mat image_for_plot = image.clone();
+  fcos_trt_backend::utils::plot_detections(image_for_plot, detection_results, 0.5f);
   cv::imwrite("fcos_trt_detections.png", image_for_plot);
 
   fcos_trt_backend::utils::print_detection_results(detection_results, 9);
