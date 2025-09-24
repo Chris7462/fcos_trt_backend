@@ -18,6 +18,7 @@
 *.pyc
 *.engine
 *.txt
+*.data
 
 # Ignore build, devel, and logs folder
 build
