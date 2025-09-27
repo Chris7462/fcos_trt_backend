@@ -75,7 +75,7 @@ def export_fcos_model(output_path, input_height, input_width):
             dummy_input,
             output_path,
             export_params=True,
-            opset_version=17,
+            opset_version=18,
             input_names=['input'],
             output_names=[
                 'cls_logits',
