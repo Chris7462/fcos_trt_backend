@@ -66,7 +66,7 @@ def export_fcos_model(output_path, input_height, input_width):
     model = FCOSBackbone()
 
     print('Preparing dummy input...')
-    dummy_input = torch.randn(1, 3, input_height, input_width)
+    dummy_input = ([torch.randn(3, input_height, input_width)],)
 
     print('Exporting to ONNX...')
     try:
