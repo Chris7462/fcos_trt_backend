@@ -84,6 +84,7 @@ def export_fcos_model(output_path, input_height, input_width):
                 'anchors',
                 'image_sizes',
                 'num_anchors_per_level'],
+            dynamo=False,
             verbose=True
             # Note: Dynamic axes might be tricky with list inputs and anchor generation
             # Consider using fixed batch size for more reliable ONNX export
