@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.18)
 project(fcos_trt_backend VERSION 1.0.0 LANGUAGES CXX CUDA)
 
 # Do not set the default build type automatically, leave it to the user
@@ -25,15 +25,7 @@ find_library(TENSORRT_LIBRARY nvinfer
   HINTS ${TENSORRT_ROOT} ${TENSORRT_BUILD} ${CUDA_TOOLKIT_ROOT_DIR}
   PATH_SUFFIXES lib lib64 lib/x64)
 
-# find_library(TENSORRT_LIBRARY_PLUGIN nvinfer_plugin
-#   HINTS ${TENSORRT_ROOT} ${TENSORRT_BUILD} ${CUDA_TOOLKIT_ROOT_DIR}
-#   PATH_SUFFIXES lib lib64 lib/x64)
-
-# find_library(TENSORRT_LIBRARY_PARSER nvonnxparser
-#   HINTS ${TENSORRT_ROOT} ${TENSORRT_BUILD} ${CUDA_TOOLKIT_ROOT_DIR}
-#   PATH_SUFFIXES lib lib64 lib/x64)
 # Check if TensorRT was found
-
 if(NOT TENSORRT_INCLUDE_DIR OR NOT TENSORRT_LIBRARY)
   message(FATAL_ERROR "TensorRT not found. Please set TENSORRT_ROOT to the TensorRT installation directory.")
 endif()
@@ -42,7 +34,7 @@ endif()
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ModelGeneration.cmake)
 
 # Define the library target
-add_library(fcos_trt_backend
+add_library(fcos_trt_backend STATIC
   src/detection_utils.cpp
   src/fcos_backbone.cpp
   src/fcos_post_processor.cpp)
@@ -50,18 +42,12 @@ add_library(fcos_trt_backend
 # Add model generation dependency to the library
 add_model_generation_dependency(fcos_trt_backend)
 
-# Target-specific CUDA architecture (instead of global)
+# Target-specific CUDA properties
 set_target_properties(fcos_trt_backend PROPERTIES
   CUDA_SEPARABLE_COMPILATION ON
-  CUDA_RESOLVE_DEVICE_SYMBOLS ON  # Important for separate compilation
-  CUDA_ARCHITECTURES "native"  # Target-specific instead of global
+  CUDA_RESOLVE_DEVICE_SYMBOLS ON  # Device-link relocatable objects into the static lib so consumers can link it without errors
+  CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES}
 )
-
-# If native detection fails, fallback to common architectures
-if(NOT CMAKE_CUDA_ARCHITECTURES)
-  set_target_properties(fcos_trt_backend PROPERTIES
-    CUDA_ARCHITECTURES "75;86;89")  # RTX 20xx, 30xx, 40xx series
-endif()
 
 # Specify include directories for the target
 target_include_directories(fcos_trt_backend
@@ -118,9 +104,6 @@ install(DIRECTORY include/
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(CUDAToolkit) # downstream need this
 # No dependencies to export since OpenCV and TensorRT are all private
-
-# Export include directories for downstream packages
-ament_export_include_directories(include)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

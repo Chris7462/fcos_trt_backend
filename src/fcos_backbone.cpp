@@ -340,6 +340,8 @@ cv::Mat FCOSBackbone::preprocess_image(const cv::Mat & image) const
 
 HeadOutputs FCOSBackbone::infer(const cv::Mat & image)
 {
+  std::lock_guard<std::mutex> lock(infer_mutex_);
+
   // Preprocess image
   cv::Mat processed_image = preprocess_image(image);
 
