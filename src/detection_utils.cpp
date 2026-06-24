@@ -1,9 +1,9 @@
 #include <iostream>
 #include <numeric>
 
-#include <opencv2/imgproc.hpp>
-#include <opencv2/highgui.hpp>
 #include <opencv2/dnn.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
 
 // Local includes
 #include "fcos_trt_backend/detection_utils.hpp"

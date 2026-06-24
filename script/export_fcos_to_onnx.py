@@ -11,7 +11,7 @@ from torchvision.models.detection import fcos_resnet50_fpn
 from torchvision.models.detection import FCOS_ResNet50_FPN_Weights
 
 
-class FCOSBackbone(Module):
+class FCOSWrapper(Module):
     """Wrapper to extract only the Backbone from FCOS model."""
 
     def __init__(self):
@@ -63,7 +63,7 @@ def export_fcos_model(output_path, input_height, input_width):
     print('Creating pretrained FCOS backbone model...')
 
     # Create backbone-only version
-    model = FCOSBackbone()
+    model = FCOSWrapper()
 
     print('Preparing dummy input...')
     dummy_input = ([torch.randn(3, input_height, input_width)],)

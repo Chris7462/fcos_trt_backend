@@ -13,7 +13,7 @@ from torchvision.models.detection import fcos_resnet50_fpn
 from torchvision.models.detection import FCOS_ResNet50_FPN_Weights
 
 
-class FCOSBackbone(torch.nn.Module):
+class FCOSWrapper(torch.nn.Module):
     """Wrapper to extract only the Backbone from FCOS model (same as in export script)."""
 
     def __init__(self):
@@ -256,7 +256,7 @@ if __name__ == '__main__':
 
     # Create PyTorch model
     print('\nCreating PyTorch FCOS model...')
-    pytorch_model = FCOSBackbone()
+    pytorch_model = FCOSWrapper()
 
     # Run PyTorch inference
     pytorch_outputs = run_pytorch_inference(pytorch_model, image_tensor)

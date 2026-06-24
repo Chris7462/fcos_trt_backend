@@ -49,7 +49,7 @@ public:
   };
 
   // Constructor with configuration
-  explicit FCOSPostProcessor(const Config & confog = Config());
+  explicit FCOSPostProcessor(const Config & config = Config());
 
   /**
    * @brief Main postprocessing method

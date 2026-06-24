@@ -26,11 +26,11 @@ protected:
   void SetUp() override
   {
     // Configure the inferencer
-    fcos_trt_backend::FCOSBackbone::Config backbone_config;
+    fcos_trt_backend::FCOSTrtBackend::Config backbone_config;
     fcos_trt_backend::FCOSPostProcessor::Config postprocessor_config;
 
     try {
-      backbone = std::make_unique<fcos_trt_backend::FCOSBackbone>(engine_path_, backbone_config);
+      backbone = std::make_unique<fcos_trt_backend::FCOSTrtBackend>(engine_path_, backbone_config);
     } catch (const std::exception & e) {
       GTEST_SKIP() << "Failed to initialize backbone: " << e.what();
     }
@@ -55,7 +55,7 @@ protected:
     return image;
   }
 
-  std::shared_ptr<fcos_trt_backend::FCOSBackbone> backbone;
+  std::shared_ptr<fcos_trt_backend::FCOSTrtBackend> backbone;
   std::shared_ptr<fcos_trt_backend::FCOSPostProcessor> postprocessor;
 
 private:

@@ -3,8 +3,8 @@
 #include <cmath>
 
 // OpenCV includes
-#include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
 
 // Local includes
 #include "fcos_trt_backend/fcos_post_processor.hpp"

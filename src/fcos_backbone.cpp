@@ -32,7 +32,7 @@ void Logger::log(Severity severity, const char * msg) noexcept
 }
 
 // FCOSTrtBackend implementation
-FCOSBackbone::FCOSBackbone(const std::string & engine_path, const Config & config)
+FCOSTrtBackend::FCOSTrtBackend(const std::string & engine_path, const Config & config)
 : config_(config)
 {
   try {
@@ -47,12 +47,12 @@ FCOSBackbone::FCOSBackbone(const std::string & engine_path, const Config & confi
   }
 }
 
-FCOSBackbone::~FCOSBackbone()
+FCOSTrtBackend::~FCOSTrtBackend()
 {
   cleanup();
 }
 
-void FCOSBackbone::initialize_engine(const std::string & engine_path)
+void FCOSTrtBackend::initialize_engine(const std::string & engine_path)
 {
   // Initialize logger
   logger_ = std::make_unique<Logger>(config_.log_level);
@@ -78,7 +78,7 @@ void FCOSBackbone::initialize_engine(const std::string & engine_path)
   }
 }
 
-std::vector<uint8_t> FCOSBackbone::load_engine_file(
+std::vector<uint8_t> FCOSTrtBackend::load_engine_file(
   const std::string & engine_path) const
 {
   std::ifstream file(engine_path, std::ios::binary | std::ios::ate);
@@ -97,7 +97,7 @@ std::vector<uint8_t> FCOSBackbone::load_engine_file(
   return buffer;
 }
 
-void FCOSBackbone::find_tensor_names()
+void FCOSTrtBackend::find_tensor_names()
 {
   bool found_input = false;
   bool found_cls_logits = false;
@@ -146,7 +146,7 @@ void FCOSBackbone::find_tensor_names()
   }
 }
 
-void FCOSBackbone::initialize_memory()
+void FCOSTrtBackend::initialize_memory()
 {
   // Calculate buffer sizes based on config (not engine shape)
   input_size_ = 1 * 3 * config_.height * config_.width * sizeof(float);
@@ -247,7 +247,7 @@ void FCOSBackbone::initialize_memory()
   }
 }
 
-void FCOSBackbone::initialize_streams()
+void FCOSTrtBackend::initialize_streams()
 {
   CUDA_CHECK(cudaStreamCreate(&stream_));
   if (!stream_) {
@@ -255,7 +255,7 @@ void FCOSBackbone::initialize_streams()
   }
 }
 
-void FCOSBackbone::warmup_engine()
+void FCOSTrtBackend::warmup_engine()
 {
   CUDA_CHECK(cudaMemsetAsync(buffers_.device_input, 0, input_size_, stream_));
 
@@ -272,7 +272,7 @@ void FCOSBackbone::warmup_engine()
   std::cout << "Engine warmed up with " << config_.warmup_iterations << " iterations" << std::endl;
 }
 
-void FCOSBackbone::cleanup() noexcept
+void FCOSTrtBackend::cleanup() noexcept
 {
   // Free pinned host memory
   if (buffers_.pinned_input) {
@@ -322,7 +322,7 @@ void FCOSBackbone::cleanup() noexcept
   }
 }
 
-cv::Mat FCOSBackbone::preprocess_image(const cv::Mat & image) const
+cv::Mat FCOSTrtBackend::preprocess_image(const cv::Mat & image) const
 {
   cv::Mat processed;
 
@@ -338,7 +338,7 @@ cv::Mat FCOSBackbone::preprocess_image(const cv::Mat & image) const
   return processed;
 }
 
-HeadOutputs FCOSBackbone::infer(const cv::Mat & image)
+HeadOutputs FCOSTrtBackend::infer(const cv::Mat & image)
 {
   std::lock_guard<std::mutex> lock(infer_mutex_);
 

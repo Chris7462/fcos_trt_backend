@@ -20,7 +20,7 @@ from torchvision.ops import boxes as box_ops
 import torchvision.transforms as transforms
 
 
-class FCOSBackbone(Module):
+class FCOSWrapper(Module):
     """Wrapper to extract only the Backbone from FCOS model."""
 
     def __init__(self):
@@ -88,7 +88,7 @@ class FCOSPostProcessor:
         image_sizes: torch.Tensor,  # Now single tensor instead of list
         num_anchors_per_level: torch.Tensor  # Now tensor instead of list
     ) -> List[Dict[str, torch.Tensor]]:
-        """Postprocess the raw outputs from FCOSBackbone to get final detections."""
+        """Postprocess the raw outputs from FCOSWrapper to get final detections."""
         # Convert tensors back to expected formats
         num_anchors_per_level = num_anchors_per_level.tolist()
         image_sizes = [tuple(image_sizes.tolist())]  # Convert back to list of tuples
@@ -378,7 +378,7 @@ def visualize_comparison(image_path, original_results, custom_results, confidenc
 
     # Plot custom results
     custom_plot = plot_detections(image_path, custom_results[0],
-                                  'Custom FCOSBackbone', confidence_threshold)
+                                  'Custom FCOSWrapper', confidence_threshold)
 
     if original_plot is not None and custom_plot is not None:
         # Create side-by-side comparison
@@ -390,7 +390,7 @@ def visualize_comparison(image_path, original_results, custom_results, confidenc
         ax1.axis('off')
 
         ax2.imshow(custom_plot)
-        ax2.set_title(f'Custom FCOSBackbone + PostProcessor (with conf. > {confidence_threshold})',
+        ax2.set_title(f'Custom FCOSWrapper + PostProcessor (with conf. > {confidence_threshold})',
                       fontsize=14, fontweight='bold')
         ax2.axis('off')
 
@@ -409,7 +409,7 @@ def visualize_comparison(image_path, original_results, custom_results, confidenc
 
 
 def run_inference_comparison(image_path, confidence_threshold=0.5, tolerance=1e-4):
-    """Run inference comparison between original FCOS and custom FCOSBackbone + PostProcessor."""
+    """Run inference comparison between original FCOS and custom FCOSWrapper + PostProcessor."""
     # Check if files exist
     if not os.path.exists(image_path):
         print(f'Error: Test image not found at {image_path}')
@@ -437,9 +437,9 @@ def run_inference_comparison(image_path, confidence_threshold=0.5, tolerance=1e-
 
     print('✓ Original FCOS inference completed!')
 
-    print('\n=== Running Custom FCOSBackbone + PostProcessor ===')
-    # 2. FCOSBackbone + PostProcessor
-    backbone_model = FCOSBackbone()
+    print('\n=== Running Custom FCOSWrapper + PostProcessor ===')
+    # 2. FCOSWrapper + PostProcessor
+    backbone_model = FCOSWrapper()
     post_processor = FCOSPostProcessor(
         score_thresh=original_model.score_thresh,
         nms_thresh=original_model.nms_thresh,
@@ -451,7 +451,7 @@ def run_inference_comparison(image_path, confidence_threshold=0.5, tolerance=1e-
         # Get raw outputs from backbone
         head_outputs = backbone_model(test_images)
 
-        print('Raw outputs from FCOSBackbone:')
+        print('Raw outputs from FCOSWrapper:')
         print_tensor_stats(head_outputs['cls_logits'], 'CLS_LOGITS')
         print_tensor_stats(head_outputs['bbox_regression'], 'BBOX_REGRESSION')
         print_tensor_stats(head_outputs['bbox_ctrness'], 'BBOX_CTRNESS')
@@ -482,7 +482,7 @@ def run_inference_comparison(image_path, confidence_threshold=0.5, tolerance=1e-
             original_image_sizes
         )
 
-    print('✓ Custom FCOSBackbone + PostProcessor inference completed!')
+    print('✓ Custom FCOSWrapper + PostProcessor inference completed!')
 
     # 3. Compare detection results
     results_match = compare_detection_results(original_results, custom_results, tolerance)
@@ -494,7 +494,7 @@ def run_inference_comparison(image_path, confidence_threshold=0.5, tolerance=1e-
     print('\n=== Final Summary ===')
     if results_match:
         print('🎉 PERFECT: Custom postprocessing implementation matches original FCOS!')
-        print('Your FCOSBackbone + FCOSPostProcessor is working correctly.')
+        print('Your FCOSWrapper + FCOSPostProcessor is working correctly.')
     else:
         print('❌ MISMATCH: Custom postprocessing differs from original FCOS.')
         print('Check the postprocessing implementation for potential issues.')

@@ -35,7 +35,7 @@ private:
 };
 
 // FCOS TensorRT inference class
-class FCOSBackbone
+class FCOSTrtBackend
 {
 public:
   struct Config
@@ -76,16 +76,16 @@ public:
   };
 
   // Constructor with configuration
-  explicit FCOSBackbone(const std::string & engine_path, const Config & config = Config());
+  explicit FCOSTrtBackend(const std::string & engine_path, const Config & config = Config());
 
   // Destructor
-  ~FCOSBackbone();
+  ~FCOSTrtBackend();
 
   // Disable copy and move semantics - use std::unique_ptr for ownership transfer
-  FCOSBackbone(const FCOSBackbone &) = delete;
-  FCOSBackbone & operator=(const FCOSBackbone &) = delete;
-  FCOSBackbone(FCOSBackbone &&) = delete;
-  FCOSBackbone & operator=(FCOSBackbone &&) = delete;
+  FCOSTrtBackend(const FCOSTrtBackend &) = delete;
+  FCOSTrtBackend & operator=(const FCOSTrtBackend &) = delete;
+  FCOSTrtBackend(FCOSTrtBackend &&) = delete;
+  FCOSTrtBackend & operator=(FCOSTrtBackend &&) = delete;
 
   // Main inference method
   /**
@@ -94,9 +94,6 @@ public:
    * @return Head outputs containing cls_logits, bbox_regression, and bbox_ctrness
    */
   HeadOutputs infer(const cv::Mat & image);
-
-  // Utility function to print results
-  //void print_results(const HeadOutputs & results);
 
 private:
   // Initialization methods
