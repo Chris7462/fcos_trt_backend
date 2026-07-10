@@ -41,7 +41,8 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ModelGeneration.cmake)
 add_library(${PROJECT_NAME} STATIC
   src/detection_utils.cpp
   src/fcos_backbone.cpp
-  src/fcos_post_processor.cpp)
+  src/fcos_post_processor.cpp
+  src/internal/fcos_backbone_impl.cpp)
 
 # Add model generation dependency to the library
 add_model_generation_dependency(${PROJECT_NAME})
@@ -59,6 +60,12 @@ target_include_directories(${PROJECT_NAME}
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
   PRIVATE
+    # Implementation-only headers under src/internal/. Adding src/ here (not
+    # src/internal/) lets files inside src/internal/ use the quote-include
+    # form "internal/xxx.hpp" consistently, matching how src/fcos_backbone.cpp
+    # already resolves "internal/fcos_backbone_impl.hpp" relative to its own
+    # directory. Never installed - purely a build-time path.
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
     # Implementation dependencies - not exposed to consumers
     # Note: ${CUDAToolkit_INCLUDE_DIRS} not needed - CUDA::cudart provides includes automatically
     ${TENSORRT_INCLUDE_DIR})
@@ -95,13 +102,13 @@ install(TARGETS ${PROJECT_NAME}
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib)
 
-# Install header files
+# Install header files (only include/ is ever installed - src/internal/ never ships)
 install(DIRECTORY include/
   DESTINATION include)
 
 # Export targets and dependencies
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
-ament_export_dependencies(CUDAToolkit) # downstream need this
+ament_export_dependencies(CUDAToolkit) # downstream needs this
 # No dependencies to export since OpenCV and TensorRT are all private
 
 if(BUILD_TESTING)
