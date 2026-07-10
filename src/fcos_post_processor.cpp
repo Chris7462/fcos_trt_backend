@@ -8,7 +8,6 @@
 
 // Local includes
 #include "fcos_trt_backend/fcos_post_processor.hpp"
-#include "fcos_trt_backend/exception.hpp"
 #include "fcos_trt_backend/detection_utils.hpp"
 
 
