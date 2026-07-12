@@ -14,10 +14,21 @@
 namespace fcos_trt_backend
 {
 
-FCOSTrtBackend::Impl::~Impl()
+namespace
 {
-  cleanup();
+
+// Allocate device memory and immediately wrap it in an owning DevPtr, so
+// there is no window where a raw, unmanaged pointer exists in caller scope.
+internal::DevPtr cuda_malloc_dev(size_t bytes)
+{
+  void * p = nullptr;
+  CUDA_CHECK(cudaMalloc(&p, bytes));
+  return internal::DevPtr(p);
 }
+
+} // namespace
+
+FCOSTrtBackend::Impl::~Impl() = default;
 
 void FCOSTrtBackend::Impl::initialize(
   const std::string & engine_path, const FCOSTrtBackend::Config & config)
@@ -175,52 +186,40 @@ void FCOSTrtBackend::Impl::initialize_memory(const FCOSTrtBackend::Config & conf
   }
   num_anchors_per_level_size_ *= sizeof(int64_t);
 
-  // Allocate pinned host memory
-  CUDA_CHECK(cudaMallocHost(&buffers_.pinned_input, input_size_));
-
-  // Allocate GPU memory
-  CUDA_CHECK(cudaMalloc(&buffers_.device_input, input_size_));
-  CUDA_CHECK(cudaMalloc(&buffers_.device_cls_logits, cls_logits_size_));
-  CUDA_CHECK(cudaMalloc(&buffers_.device_bbox_regression, bbox_regression_size_));
-  CUDA_CHECK(cudaMalloc(&buffers_.device_bbox_ctrness, bbox_ctrness_size_));
-  CUDA_CHECK(cudaMalloc(&buffers_.device_anchors, anchors_size_));
-  CUDA_CHECK(cudaMalloc(&buffers_.device_image_sizes, image_sizes_size_));
-  CUDA_CHECK(cudaMalloc(&buffers_.device_num_anchors_per_level, num_anchors_per_level_size_));
-  CUDA_CHECK(cudaMalloc(&buffers_.device_temp_buffer, input_size_));
+  // Allocate GPU memory. If a later allocation throws, everything already
+  // assigned above is freed automatically as the exception unwinds - no
+  // manual cleanup() bookkeeping.
+  buffers_.device_input = cuda_malloc_dev(input_size_);
+  buffers_.device_cls_logits = cuda_malloc_dev(cls_logits_size_);
+  buffers_.device_bbox_regression = cuda_malloc_dev(bbox_regression_size_);
+  buffers_.device_bbox_ctrness = cuda_malloc_dev(bbox_ctrness_size_);
+  buffers_.device_anchors = cuda_malloc_dev(anchors_size_);
+  buffers_.device_image_sizes = cuda_malloc_dev(image_sizes_size_);
+  buffers_.device_num_anchors_per_level = cuda_malloc_dev(num_anchors_per_level_size_);
 
   // Set tensor addresses for the new TensorRT API
-  if (!context_->setTensorAddress(input_name_.c_str(),
-    static_cast<void *>(buffers_.device_input)))
-  {
+  if (!context_->setTensorAddress(input_name_.c_str(), buffers_.device_input.get())) {
     throw internal::TensorRTException("Failed to set input tensor address");
   }
-  if (!context_->setTensorAddress(cls_logits_name_.c_str(),
-    static_cast<void *>(buffers_.device_cls_logits)))
-  {
+  if (!context_->setTensorAddress(cls_logits_name_.c_str(), buffers_.device_cls_logits.get())) {
     throw internal::TensorRTException("Failed to set cls_logits tensor address");
   }
-  if (!context_->setTensorAddress(bbox_regression_name_.c_str(),
-    static_cast<void *>(buffers_.device_bbox_regression)))
+  if (!context_->setTensorAddress(
+      bbox_regression_name_.c_str(), buffers_.device_bbox_regression.get()))
   {
     throw internal::TensorRTException("Failed to set bbox_regression tensor address");
   }
-  if (!context_->setTensorAddress(bbox_ctrness_name_.c_str(),
-    static_cast<void *>(buffers_.device_bbox_ctrness)))
-  {
+  if (!context_->setTensorAddress(bbox_ctrness_name_.c_str(), buffers_.device_bbox_ctrness.get())) {
     throw internal::TensorRTException("Failed to set bbox_ctrness tensor address");
   }
-  if (!context_->setTensorAddress(anchors_name_.c_str(),
-    static_cast<void *>(buffers_.device_anchors)))
-  {
+  if (!context_->setTensorAddress(anchors_name_.c_str(), buffers_.device_anchors.get())) {
     throw internal::TensorRTException("Failed to set anchors tensor address");
   }
-  if (!context_->setTensorAddress(image_sizes_name_.c_str(),
-    static_cast<void *>(buffers_.device_image_sizes)))
-  {
+  if (!context_->setTensorAddress(image_sizes_name_.c_str(), buffers_.device_image_sizes.get())) {
     throw internal::TensorRTException("Failed to set image_sizes tensor address");
   }
-  if (!context_->setTensorAddress(num_anchors_per_level_name_.c_str(),
-    static_cast<void *>(buffers_.device_num_anchors_per_level)))
+  if (!context_->setTensorAddress(
+      num_anchors_per_level_name_.c_str(), buffers_.device_num_anchors_per_level.get()))
   {
     throw internal::TensorRTException("Failed to set num_anchors_per_level tensor address");
   }
@@ -228,77 +227,26 @@ void FCOSTrtBackend::Impl::initialize_memory(const FCOSTrtBackend::Config & conf
 
 void FCOSTrtBackend::Impl::initialize_streams()
 {
-  CUDA_CHECK(cudaStreamCreate(&stream_));
-  if (!stream_) {
-    throw internal::TensorRTException("Failed to create CUDA stream");
-  }
+  cudaStream_t raw = nullptr;
+  CUDA_CHECK(cudaStreamCreate(&raw));
+  stream_.reset(raw);
 }
 
 void FCOSTrtBackend::Impl::warmup_engine(const FCOSTrtBackend::Config & config)
 {
-  CUDA_CHECK(cudaMemsetAsync(buffers_.device_input, 0, input_size_, stream_));
+  CUDA_CHECK(cudaMemsetAsync(buffers_.device_input.get(), 0, input_size_, stream_.get()));
 
   for (int i = 0; i < config.warmup_iterations; ++i) {
     // Run inference pipeline once to initialize CUDA kernels
-    if (!context_->enqueueV3(stream_)) {
+    if (!context_->enqueueV3(stream_.get())) {
       throw internal::TensorRTException("Failed to enqueue warmup inference");
     }
 
     // Synchronize to ensure completion
-    CUDA_CHECK(cudaStreamSynchronize(stream_));
+    CUDA_CHECK(cudaStreamSynchronize(stream_.get()));
   }
 
   std::cout << "Engine warmed up with " << config.warmup_iterations << " iterations" << std::endl;
-}
-
-void FCOSTrtBackend::Impl::cleanup() noexcept
-{
-  // Free pinned host memory
-  if (buffers_.pinned_input) {
-    cudaFreeHost(buffers_.pinned_input);
-  }
-
-  // Free device memory
-  if (buffers_.device_input) {
-    cudaFree(buffers_.device_input);
-  }
-
-  if (buffers_.device_cls_logits) {
-    cudaFree(buffers_.device_cls_logits);
-  }
-
-  if (buffers_.device_bbox_regression) {
-    cudaFree(buffers_.device_bbox_regression);
-  }
-
-  if (buffers_.device_bbox_ctrness) {
-    cudaFree(buffers_.device_bbox_ctrness);
-  }
-
-  if (buffers_.device_anchors) {
-    cudaFree(buffers_.device_anchors);
-  }
-
-  if (buffers_.device_image_sizes) {
-    cudaFree(buffers_.device_image_sizes);
-  }
-
-  if (buffers_.device_num_anchors_per_level) {
-    cudaFree(buffers_.device_num_anchors_per_level);
-  }
-
-  if (buffers_.device_temp_buffer) {
-    cudaFree(buffers_.device_temp_buffer);
-  }
-
-  // Reset all pointers to nullptr
-  buffers_ = MemoryBuffers{};
-
-  // Destroy streams safely
-  if (stream_) {
-    cudaStreamDestroy(stream_);
-    stream_ = nullptr;
-  }
 }
 
 cv::Mat FCOSTrtBackend::Impl::preprocess_image(
@@ -338,17 +286,16 @@ HeadOutputs FCOSTrtBackend::Impl::infer(
   }
 
   // Copy input data to GPU
-  CUDA_CHECK(cudaMemcpyAsync(buffers_.device_input, input_data.data(),
-                            input_data.size() * sizeof(float),
-                            cudaMemcpyHostToDevice, stream_));
+  CUDA_CHECK(cudaMemcpyAsync(buffers_.device_input.get(), input_data.data(),
+    input_data.size() * sizeof(float), cudaMemcpyHostToDevice, stream_.get()));
 
   // Run inference
-  if (!context_->enqueueV3(stream_)) {
+  if (!context_->enqueueV3(stream_.get())) {
     throw internal::TensorRTException("Failed to run inference");
   }
 
   // Wait for completion
-  CUDA_CHECK(cudaStreamSynchronize(stream_));
+  CUDA_CHECK(cudaStreamSynchronize(stream_.get()));
 
   // Prepare results
   HeadOutputs results;
@@ -370,18 +317,19 @@ HeadOutputs FCOSTrtBackend::Impl::infer(
   results.num_anchors_per_level.resize(num_anchors_size);
 
   // Copy results from GPU to CPU
-  CUDA_CHECK(cudaMemcpy(results.cls_logits.data(), buffers_.device_cls_logits,
-                        cls_logits_size_, cudaMemcpyDeviceToHost));
-  CUDA_CHECK(cudaMemcpy(results.bbox_regression.data(), buffers_.device_bbox_regression,
-                        bbox_regression_size_, cudaMemcpyDeviceToHost));
-  CUDA_CHECK(cudaMemcpy(results.bbox_ctrness.data(), buffers_.device_bbox_ctrness,
-                        bbox_ctrness_size_, cudaMemcpyDeviceToHost));
-  CUDA_CHECK(cudaMemcpy(results.anchors.data(), buffers_.device_anchors,
-                        anchors_size_, cudaMemcpyDeviceToHost));
-  CUDA_CHECK(cudaMemcpy(results.image_sizes.data(), buffers_.device_image_sizes,
-                        image_sizes_size_, cudaMemcpyDeviceToHost));
-  CUDA_CHECK(cudaMemcpy(results.num_anchors_per_level.data(), buffers_.device_num_anchors_per_level,
-                        num_anchors_per_level_size_, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy(results.cls_logits.data(), buffers_.device_cls_logits.get(),
+    cls_logits_size_, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy(results.bbox_regression.data(), buffers_.device_bbox_regression.get(),
+    bbox_regression_size_, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy(results.bbox_ctrness.data(), buffers_.device_bbox_ctrness.get(),
+    bbox_ctrness_size_, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy(results.anchors.data(), buffers_.device_anchors.get(),
+    anchors_size_, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy(results.image_sizes.data(), buffers_.device_image_sizes.get(),
+    image_sizes_size_, cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaMemcpy(
+    results.num_anchors_per_level.data(), buffers_.device_num_anchors_per_level.get(),
+    num_anchors_per_level_size_, cudaMemcpyDeviceToHost));
 
   return results;
 }

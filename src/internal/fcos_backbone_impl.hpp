@@ -17,6 +17,7 @@
 // local headers
 #include "fcos_trt_backend/fcos_backbone.hpp"
 #include "internal/trt_logger.hpp"
+#include "internal/cuda_raii.hpp"
 
 // NOTE: This is a private implementation header. It lives under src/internal/
 // and is never installed - it must not be included by any consumer of the
@@ -47,9 +48,6 @@ private:
   void initialize_streams();
   void warmup_engine(const FCOSTrtBackend::Config & config);
 
-  // Memory management
-  void cleanup() noexcept;
-
   // Helper methods
   std::vector<uint8_t> load_engine_file(const std::string & engine_path) const;
   cv::Mat preprocess_image(const cv::Mat & image, const FCOSTrtBackend::Config & config) const;
@@ -78,29 +76,23 @@ private:
   size_t image_sizes_size_ = 0;
   size_t num_anchors_per_level_size_ = 0;
 
-  // Memory buffers
+  // Memory buffers. Ownership via RAII smart pointers (see cuda_raii.hpp) -
+  // no manual cleanup() bookkeeping needed; destruction order below (and
+  // stream_ declared last) ensures buffers_ is torn down before the stream
+  // that operations on it were queued against.
   struct MemoryBuffers
   {
-    float * pinned_input;
-    float * device_input;
-    float * device_cls_logits;
-    float * device_bbox_regression;
-    float * device_bbox_ctrness;
-    float * device_anchors;
-    int64_t * device_image_sizes;
-    int64_t * device_num_anchors_per_level;
-    float * device_temp_buffer; // For img preprocessing
-
-    MemoryBuffers()
-    : pinned_input(nullptr), device_input(nullptr),
-      device_cls_logits(nullptr), device_bbox_regression(nullptr),
-      device_bbox_ctrness(nullptr), device_anchors(nullptr),
-      device_image_sizes(nullptr), device_num_anchors_per_level(nullptr),
-      device_temp_buffer(nullptr) {}
+    internal::DevPtr device_input;
+    internal::DevPtr device_cls_logits;
+    internal::DevPtr device_bbox_regression;
+    internal::DevPtr device_bbox_ctrness;
+    internal::DevPtr device_anchors;
+    internal::DevPtr device_image_sizes;
+    internal::DevPtr device_num_anchors_per_level;
   } buffers_;
 
   // CUDA stream
-  cudaStream_t stream_ = nullptr;
+  internal::StreamPtr stream_;
 };
 
 } // namespace fcos_trt_backend
